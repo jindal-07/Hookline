@@ -1,0 +1,28 @@
+# Dependencies and build output
+node_modules/
+client/dist/
+coverage/
+
+# Secrets — never commit real keys (.env.example holds placeholders only)
+.env
+.env.*
+!.env.example
+
+# Runtime data: downloaded media, skill job files, local databases
+server/storage/
+.pg-test/
+tests/.tmp/
+
+# Your spreadsheets and exports (transcripts, screenplays, performance labels) are data, not source
+/*.csv
+/*.xlsx
+/*.xls
+/data/
+/exports/
+
+# Logs, OS and editor files
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+*.swp

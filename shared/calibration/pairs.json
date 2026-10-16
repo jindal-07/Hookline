@@ -1,0 +1,31 @@
+{
+  "description": "Labelled sentence pairs for calibrating embedding similarity → agreement. 'related' pairs express the same meaning (often across Hindi/English, as transcript vs screenplay analysis); 'unrelated' pairs share a setting or words but not meaning. Add pairs from your own reviewed videos to improve calibration.",
+  "related": [
+    ["Mrs. Kapoor mocks the maid's dream of becoming an officer", "अब नौकरानी अफसर बनेगी, यह सपना देखो"],
+    ["She demands to know why the tea is not ready", "चाय अभी तक नहीं बनी?"],
+    ["He offers her his old books and tells her to keep them", "ये मेरी पुरानी किताबें हैं, तुम रख लो"],
+    ["She asks what is wrong with trying", "कोशिश करने में क्या बुराई है?"],
+    ["The son confesses he lost the money gambling", "मैंने सारे पैसे जुए में हार दिए"],
+    ["The mother refuses to let her daughter marry him", "मैं इस शादी के लिए कभी हाँ नहीं करूँगी"],
+    ["The boss threatens to fire him if he is late again", "If you are late one more time, you are fired"],
+    ["The girl thanks the stranger for saving her", "Thank you so much for saving me today"],
+    ["He reveals that he is the company's real owner", "Actually, I own this company"],
+    ["The husband accuses his wife of hiding the letter", "तुमने वो चिट्ठी मुझसे क्यों छुपाई?"],
+    ["The old man warns the children not to go near the well", "बच्चो, कुएँ के पास मत जाना"],
+    ["She begs the doctor to save her son", "डॉक्टर साहब, मेरे बेटे को बचा लीजिए"]
+  ],
+  "unrelated": [
+    ["Mrs. Kapoor mocks the maid's dream of becoming an officer", "चलो आज बाहर खाना खाते हैं"],
+    ["She demands to know why the tea is not ready", "Did you watch the cricket match yesterday?"],
+    ["He offers her his old books and tells her to keep them", "बारिश हो रही है, छाता ले लो"],
+    ["She asks what is wrong with trying", "The train leaves at seven tomorrow"],
+    ["The son confesses he lost the money gambling", "Grandmother is planting tomatoes in the garden"],
+    ["The mother refuses to let her daughter marry him", "मेरा फ़ोन चार्ज नहीं हो रहा"],
+    ["The boss threatens to fire him if he is late again", "बच्चे पार्क में खेल रहे हैं"],
+    ["The girl thanks the stranger for saving her", "The office printer is out of paper"],
+    ["He reveals that he is the company's real owner", "कल मौसम बहुत अच्छा था"],
+    ["The husband accuses his wife of hiding the letter", "Let's order pizza for dinner"],
+    ["The old man warns the children not to go near the well", "Her new dress is blue"],
+    ["She begs the doctor to save her son", "हम अगले महीने गोवा जा रहे हैं"]
+  ]
+}

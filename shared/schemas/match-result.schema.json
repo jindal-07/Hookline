@@ -1,0 +1,30 @@
+{
+  "$id": "match-result.schema.json",
+  "title": "MatchResult",
+  "type": "object",
+  "required": ["video_id", "overall_score", "story_score", "character_score", "dialogue_score", "confidence", "match_status", "evidence", "reasoning", "scoring_version"],
+  "properties": {
+    "video_id": { "type": "string" },
+    "overall_score": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+    "story_score": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+    "character_score": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+    "dialogue_score": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "match_status": { "type": "string", "enum": ["MATCHED", "PARTIAL", "MISMATCHED", "INCONCLUSIVE"] },
+    "eligible": { "type": "boolean" },
+    "evidence": {
+      "type": "object",
+      "required": ["story_matches", "character_matches", "dialogue_matches", "mismatches", "uncertain_elements"],
+      "properties": {
+        "story_matches": { "type": "array" },
+        "character_matches": { "type": "array" },
+        "dialogue_matches": { "type": "array" },
+        "mismatches": { "type": "array" },
+        "uncertain_elements": { "type": "array" }
+      }
+    },
+    "inconclusive_reasons": { "type": "array", "items": { "type": "string" } },
+    "reasoning": { "type": "string" },
+    "scoring_version": { "type": "string" }
+  }
+}

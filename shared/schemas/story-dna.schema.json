@@ -1,0 +1,33 @@
+{
+  "$id": "story-dna.schema.json",
+  "title": "StoryDNA",
+  "description": "Structural abstraction of a source video. Contains narrative mechanics only — no source names, dialogue or distinctive details.",
+  "type": "object",
+  "required": ["hook_pattern", "core_conflict", "story_engine", "character_archetypes", "emotional_arc", "dialogue_functions", "pacing", "ending_type", "format"],
+  "properties": {
+    "hook_pattern": { "type": "string" },
+    "core_conflict": { "type": "string" },
+    "story_engine": { "type": "array", "items": { "type": "string" } },
+    "character_archetypes": { "type": "array", "items": { "type": "string" } },
+    "emotional_arc": { "type": "array", "items": { "type": "string" } },
+    "dialogue_functions": { "type": "array", "items": { "type": "string" } },
+    "pacing": { "type": "string", "enum": ["Fast", "Moderate", "Slow"] },
+    "ending_type": { "type": "string" },
+    "format": {
+      "type": "object",
+      "required": ["duration_seconds", "scene_count", "genre", "tone", "language"],
+      "properties": {
+        "duration_seconds": { "type": "number" },
+        "scene_count": { "type": "integer" },
+        "genre": { "type": "string" },
+        "tone": { "type": "string" },
+        "language": { "type": "string" }
+      }
+    },
+    "avoid": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Distinctive source elements the new script must NOT reuse (names, signature lines, specific premises)"
+    }
+  }
+}

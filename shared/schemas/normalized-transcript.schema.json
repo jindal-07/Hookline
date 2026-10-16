@@ -1,0 +1,68 @@
+{
+  "$id": "normalized-transcript.schema.json",
+  "title": "NormalizedTranscript",
+  "type": "object",
+  "required": ["video_id", "language", "language_confidence", "duration_seconds", "speakers", "dialogue_segments", "narration_segments", "uncertain_segments", "important_statements", "repeated_phrases", "stats"],
+  "properties": {
+    "video_id": { "type": "string" },
+    "language": { "type": "string" },
+    "language_confidence": { "type": ["number", "null"] },
+    "duration_seconds": { "type": "number" },
+    "speakers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["speaker_id", "segment_count", "speaking_seconds"],
+        "properties": {
+          "speaker_id": { "type": "string" },
+          "segment_count": { "type": "integer" },
+          "speaking_seconds": { "type": "number" }
+        }
+      }
+    },
+    "dialogue_segments": { "type": "array", "items": { "$ref": "#/$defs/segment" } },
+    "narration_segments": { "type": "array", "items": { "$ref": "#/$defs/segment" } },
+    "uncertain_segments": { "type": "array", "items": { "$ref": "#/$defs/segment" } },
+    "important_statements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["segment_id", "reason"],
+        "properties": { "segment_id": { "type": "string" }, "reason": { "type": "string" } }
+      }
+    },
+    "repeated_phrases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["phrase", "count"],
+        "properties": { "phrase": { "type": "string" }, "count": { "type": "integer" } }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "required": ["word_count", "mean_confidence", "speech_seconds", "speech_ratio"],
+      "properties": {
+        "word_count": { "type": "integer" },
+        "mean_confidence": { "type": ["number", "null"] },
+        "speech_seconds": { "type": "number" },
+        "speech_ratio": { "type": "number" }
+      }
+    }
+  },
+  "$defs": {
+    "segment": {
+      "type": "object",
+      "required": ["segment_id", "speaker_id", "start_time", "end_time", "text", "confidence", "kind"],
+      "properties": {
+        "segment_id": { "type": "string" },
+        "speaker_id": { "type": "string" },
+        "start_time": { "type": "number" },
+        "end_time": { "type": "number" },
+        "text": { "type": "string" },
+        "confidence": { "type": ["number", "null"] },
+        "kind": { "type": "string", "enum": ["dialogue", "narration", "uncertain"] }
+      }
+    }
+  }
+}

@@ -1,0 +1,467 @@
+{
+  "$id": "screenplay-analysis.schema.json",
+  "title": "ScreenplayAnalysis",
+  "description": "Structured visual-narrative analysis of a short video. Times are in seconds from the start of the video. Write descriptions in English; quote on-screen text verbatim.",
+  "type": "object",
+  "required": [
+    "metadata",
+    "hook",
+    "characters",
+    "scenes",
+    "story_structure",
+    "narrative_beats",
+    "emotional_arc",
+    "visual_storytelling",
+    "dialogue_moments"
+  ],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "required": [
+        "duration_seconds",
+        "primary_language",
+        "genre",
+        "setting",
+        "tone",
+        "visual_style",
+        "narrative_format"
+      ],
+      "properties": {
+        "duration_seconds": {
+          "type": "number",
+          "description": "Video duration in seconds"
+        },
+        "primary_language": {
+          "type": "string",
+          "description": "ISO 639-1 code of the main spoken language, or 'unknown'"
+        },
+        "genre": {
+          "type": "string",
+          "description": "Broad genre, e.g. Drama, Comedy, Romance, Thriller, Family, Horror, Social message"
+        },
+        "subgenre": {
+          "type": "string",
+          "description": "More specific subgenre, e.g. Family drama, Revenge drama, Office comedy, Workplace romance, Social justice, Supernatural horror"
+        },
+        "setting": {
+          "type": "string"
+        },
+        "tone": {
+          "type": "string"
+        },
+        "visual_style": {
+          "type": "string"
+        },
+        "narrative_format": {
+          "type": "string",
+          "description": "e.g. scripted drama, vlog, sketch, monologue, montage"
+        }
+      }
+    },
+    "hook": {
+      "type": "object",
+      "required": [
+        "opening_visual",
+        "first_seconds",
+        "attention_element",
+        "curiosity_mechanism",
+        "initial_question"
+      ],
+      "properties": {
+        "opening_visual": {
+          "type": "string"
+        },
+        "first_seconds": {
+          "type": "string",
+          "description": "What happens in the first 3-5 seconds"
+        },
+        "attention_element": {
+          "type": "string"
+        },
+        "curiosity_mechanism": {
+          "type": "string"
+        },
+        "initial_question": {
+          "type": "string",
+          "description": "The unresolved question or tension set up by the opening; empty if none"
+        }
+      }
+    },
+    "characters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "character_id",
+          "label",
+          "appearance",
+          "role",
+          "traits",
+          "motivation",
+          "relationships",
+          "key_actions",
+          "emotional_progression"
+        ],
+        "properties": {
+          "character_id": {
+            "type": "string",
+            "description": "CHAR_001, CHAR_002, ..."
+          },
+          "label": {
+            "type": "string",
+            "description": "Name if spoken/shown, otherwise a generic label like 'Maid' or 'Older man'. Never a real-world identity inferred from appearance."
+          },
+          "appearance": {
+            "type": "string"
+          },
+          "age_range": {
+            "type": "string",
+            "description": "Only when reasonably inferable, else empty"
+          },
+          "role": {
+            "type": "string",
+            "description": "Narrative role, e.g. protagonist, antagonist, mentor, victim, comic relief"
+          },
+          "traits": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "motivation": {
+            "type": "string"
+          },
+          "relationships": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "character_id",
+                "relationship"
+              ],
+              "properties": {
+                "character_id": {
+                  "type": "string"
+                },
+                "relationship": {
+                  "type": "string",
+                  "description": "e.g. employer, mother, rival, spouse"
+                }
+              }
+            }
+          },
+          "key_actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "emotional_progression": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "scenes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "scene_id",
+          "start_time",
+          "end_time",
+          "location",
+          "characters",
+          "visual_description",
+          "actions",
+          "emotional_state",
+          "conflict",
+          "narrative_purpose",
+          "dialogue_summary",
+          "story_beat",
+          "boundary_certainty"
+        ],
+        "properties": {
+          "scene_id": {
+            "type": "string",
+            "description": "SCENE_001, ..."
+          },
+          "start_time": {
+            "type": "number"
+          },
+          "end_time": {
+            "type": "number"
+          },
+          "location": {
+            "type": "string"
+          },
+          "characters": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "character_ids present"
+          },
+          "visual_description": {
+            "type": "string"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "emotional_state": {
+            "type": "string"
+          },
+          "conflict": {
+            "type": "string"
+          },
+          "narrative_purpose": {
+            "type": "string"
+          },
+          "dialogue_summary": {
+            "type": "string",
+            "description": "Summary of what is said in this scene; empty if no speech"
+          },
+          "story_beat": {
+            "type": "string",
+            "description": "Hook, Setup, Inciting incident, Rising action, Conflict, Escalation, Turning point, Climax, Resolution, Final reveal, Call to action, or Other"
+          },
+          "boundary_certainty": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "approximate"
+            ]
+          }
+        }
+      }
+    },
+    "story_structure": {
+      "type": "array",
+      "description": "One entry per structural element. Do not force a three-act structure; mark absent or uncertain elements.",
+      "items": {
+        "type": "object",
+        "required": [
+          "element",
+          "status",
+          "description"
+        ],
+        "properties": {
+          "element": {
+            "type": "string",
+            "enum": [
+              "hook",
+              "setup",
+              "inciting_incident",
+              "rising_action",
+              "conflict",
+              "escalation",
+              "turning_point",
+              "climax",
+              "resolution",
+              "final_reveal",
+              "call_to_action"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "present",
+              "absent",
+              "uncertain"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "start_time": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "narrative_beats": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "beat_id",
+          "timestamp",
+          "description",
+          "characters",
+          "emotional_impact",
+          "narrative_purpose"
+        ],
+        "properties": {
+          "beat_id": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "number"
+          },
+          "description": {
+            "type": "string"
+          },
+          "characters": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "emotional_impact": {
+            "type": "string"
+          },
+          "narrative_purpose": {
+            "type": "string"
+          },
+          "cause": {
+            "type": "string",
+            "description": "beat_id of the event that causes this one, if any"
+          }
+        }
+      }
+    },
+    "emotional_arc": {
+      "type": "object",
+      "required": [
+        "stages",
+        "summary"
+      ],
+      "properties": {
+        "stages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "e.g. curiosity, tension, shock, confrontation, payoff"
+        },
+        "summary": {
+          "type": "string"
+        }
+      }
+    },
+    "visual_storytelling": {
+      "type": "object",
+      "required": [
+        "camera",
+        "gestures",
+        "props",
+        "locations",
+        "text_overlays",
+        "visual_reveals",
+        "transitions",
+        "symbolic_objects"
+      ],
+      "properties": {
+        "camera": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/detail"
+          }
+        },
+        "gestures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/detail"
+          }
+        },
+        "props": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/detail"
+          }
+        },
+        "locations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/detail"
+          }
+        },
+        "text_overlays": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/detail"
+          }
+        },
+        "visual_reveals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/detail"
+          }
+        },
+        "transitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/detail"
+          }
+        },
+        "symbolic_objects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/detail"
+          }
+        }
+      }
+    },
+    "dialogue_moments": {
+      "type": "array",
+      "description": "Key spoken moments, in order. Summarize meaning and intent; do not invent dialogue that is not heard.",
+      "items": {
+        "type": "object",
+        "required": [
+          "timestamp",
+          "character_id",
+          "summary",
+          "intent",
+          "is_reveal"
+        ],
+        "properties": {
+          "timestamp": {
+            "type": "number"
+          },
+          "character_id": {
+            "type": "string",
+            "description": "Speaking character, or 'UNKNOWN' / 'NARRATOR'"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "intent": {
+            "type": "string",
+            "description": "e.g. accuse, plead, reveal, threaten, comfort, withhold, inform"
+          },
+          "is_reveal": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "detail": {
+      "type": "object",
+      "required": [
+        "detail",
+        "basis"
+      ],
+      "properties": {
+        "detail": {
+          "type": "string"
+        },
+        "basis": {
+          "type": "string",
+          "enum": [
+            "observed",
+            "interpreted"
+          ],
+          "description": "observed = directly visible/audible; interpreted = inference"
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

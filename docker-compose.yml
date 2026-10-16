@@ -1,0 +1,33 @@
+# Local infrastructure. The database is Neon (see .env.example), so by default this only starts Redis for BullMQ:
+#   docker compose up -d
+# To run PostgreSQL locally instead of Neon:
+#   docker compose --profile local-db up -d
+services:
+  postgres:
+    profiles: ["local-db"]
+    image: postgres:17
+    environment:
+      POSTGRES_USER: reelscript
+      POSTGRES_PASSWORD: reelscript
+      POSTGRES_DB: reelscript
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reelscript"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports: ["6379:6379"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:
