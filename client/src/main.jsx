@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout.jsx";
 import { ConfirmProvider, ToastProvider } from "./components/controls.jsx";
 import { EventsProvider } from "./hooks/events.jsx";
+import AuthGate from "./components/AuthGate.jsx";
 import Overview from "./pages/Overview.jsx";
 import Upload from "./pages/Upload.jsx";
 import Batches from "./pages/Batches.jsx";
@@ -22,6 +23,7 @@ createRoot(document.getElementById("root")).render(
     <BrowserRouter>
       <ToastProvider>
         <ConfirmProvider>
+          <AuthGate>
           <EventsProvider>
             <Routes>
               <Route element={<Layout />}>
@@ -39,6 +41,7 @@ createRoot(document.getElementById("root")).render(
               </Route>
             </Routes>
           </EventsProvider>
+          </AuthGate>
         </ConfirmProvider>
       </ToastProvider>
     </BrowserRouter>

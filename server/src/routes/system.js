@@ -8,7 +8,7 @@ import { providers } from "../services/registry.js";
 import { getScoringSettings, updateScoringSettings } from "../services/settings.js";
 import { dashboardStats } from "../services/queries.js";
 import { FFMPEG_PATH, FFPROBE_PATH } from "../services/video/media.js";
-import { asyncRoute } from "../middleware/index.js";
+import { asyncRoute, isAuthorized } from "../middleware/index.js";
 import { SCORING_VERSION } from "@reelscript/shared";
 
 const r = Router();
@@ -36,13 +36,15 @@ r.patch("/settings", asyncRoute(async (req, res) => {
 
 r.get("/stats", asyncRoute(async (_req, res) => res.json(await dashboardStats())));
 
-r.get("/health", asyncRoute(async (_req, res) => {
+r.get("/health", asyncRoute(async (req, res) => {
   const checks = {};
   try { await db().sequelize.query("SELECT 1"); checks.database = { ok: true }; } catch (e) { checks.database = { ok: false, error: e.message }; }
   try { checks.queue = await queues().health(); } catch (e) { checks.queue = { ok: false, error: e.message }; }
   checks.ffmpeg = { ok: !!FFMPEG_PATH && existsSync(FFMPEG_PATH) };
   checks.ffprobe = { ok: !!FFPROBE_PATH && existsSync(FFPROBE_PATH) };
   const ok = Object.values(checks).every(c => c.ok);
+  // Public health checks (e.g. the hosting platform's) only learn up/down; details need the API token.
+  if (!isAuthorized(req)) return res.status(ok ? 200 : 503).json({ ok });
   res.status(ok ? 200 : 503).json({ ok, checks, providers: await providerStatus().catch(e => ({ error: e.message })) });
 }));
 

@@ -31,12 +31,17 @@ export const uploadLimiter = rateLimit({ windowMs: 60_000, limit: 20, standardHe
  * Optional bearer-token auth (API_AUTH_TOKEN). Enable it whenever the app is reachable by more than
  * one person. EventSource can't send headers, so /api/events also accepts ?token=.
  */
-export function auth(req, res, next) {
+/** True when no token is configured, or the request carries the right one (header, or ?token= for /events). */
+export function isAuthorized(req) {
   const token = process.env.API_AUTH_TOKEN;
-  if (!token || req.path === "/health") return next();
+  if (!token) return true;
   const given = (req.headers.authorization || "").replace(/^Bearer\s+/i, "") || (req.path === "/events" ? String(req.query.token || "") : "");
   const a = Buffer.from(given), b = Buffer.from(token);
-  if (a.length === b.length && timingSafeEqual(a, b)) return next();
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+export function auth(req, res, next) {
+  if (req.path === "/health" || isAuthorized(req)) return next();
   res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Missing or invalid API token" } });
 }
 

@@ -1,0 +1,44 @@
+# Render Blueprint for Hookline: one web service (API + built web app + in-process job workers).
+# Database: Neon (set DATABASE_URL / DATABASE_URL_UNPOOLED). No Redis needed with QUEUE_DRIVER=memory.
+# Deploy: Render dashboard → New → Blueprint → pick this repository → fill in the secret values.
+services:
+  - type: web
+    name: hookline
+    runtime: node
+    region: singapore          # next to the Neon database (ap-southeast-1)
+    plan: starter              # "free" works for demos but sleeps after 15 min idle, pausing batches
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0           # Render routes traffic to 0.0.0.0:$PORT (PORT is set by Render)
+      - key: CORS_ORIGIN
+        value: ""                # the web app is served from the same origin
+      - key: QUEUE_DRIVER
+        value: memory            # single instance; unfinished videos resume after restarts (state is in Neon)
+      - key: RUN_WORKERS_IN_API
+        value: "true"
+      - key: API_AUTH_TOKEN      # the sign-in token for the web app: copy it from the Render dashboard
+        generateValue: true
+      - key: DATABASE_URL        # Neon pooled connection string
+        sync: false
+      - key: DATABASE_URL_UNPOOLED # Neon direct connection string (migrations)
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ASSEMBLYAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY   # optional: automatic scripts (otherwise manual mode)
+        sync: false
+      - key: SKILL_MODEL         # optional, e.g. claude-sonnet-5-5
+        sync: false
+      - key: SKILL_DIR           # optional: path to the scriptwriter skill folder if you add it to the repo
+        sync: false
+      - key: MEDIA_RETENTION_HOURS
+        value: "0"               # disk is temporary on Render: delete media as soon as matching is done

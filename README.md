@@ -25,6 +25,7 @@ Everything appears in a live dashboard and can be exported.
 - [Claude Skill integration](#claude-skill-integration)
 - [API](#api)
 - [Testing](#testing)
+- [Deploying to Render](#deploying-to-render)
 - [Security](#security)
 - [Known limitations and unverified integrations](#known-limitations-and-unverified-integrations)
 
@@ -388,9 +389,30 @@ The suite needs no API keys or paid calls. It starts a throwaway UTF8 PostgreSQL
 - **Inputs and media:** zod validation on every route, rate limiting, helmet with a strict CSP, `spawn` with argument arrays (no shell), FFmpeg and download timeouts, safe id-based filenames, media paths never exposed by the API, and automatic media clean-up.
 - **Exports:** cells that could execute as spreadsheet formulas are neutralised.
 - **Untrusted content:** video-derived text and AI output are treated as untrusted. Prompts tell Gemini and the skill to treat embedded instructions as content, the skill has no write, shell or web tools, and React escapes everything rendered.
-- **Authentication:** optional bearer-token auth via `API_AUTH_TOKEN`.
+- **Authentication:** bearer-token auth via `API_AUTH_TOKEN`, with a sign-in screen in the web app (the token is kept in the browser's local storage). It is optional locally but **required in production**: the server refuses to start with `NODE_ENV=production` and no token, unless `ALLOW_PUBLIC_API=true` is set behind your own access control. Without the token, `/api/health` only reports up or down.
 
 Only download videos you are authorised to access. The downloader does not bypass authentication, DRM or platform restrictions; `YTDLP_COOKIES_FILE` is for videos *you* are allowed to view.
+
+---
+
+## Deploying to Render
+
+The repository includes a [`render.yaml`](render.yaml) Blueprint: one web service that runs the API, serves the built web app and processes jobs in-process. The database stays on Neon; no Redis is needed.
+
+1. Push the repository to GitHub (private is recommended).
+2. In Render: **New → Blueprint**, pick the repository. Render reads `render.yaml`.
+3. Fill in the secret values when prompted: `DATABASE_URL` (Neon pooled), `DATABASE_URL_UNPOOLED` (Neon direct), `GEMINI_API_KEY`, `ASSEMBLYAI_API_KEY`, and optionally `ANTHROPIC_API_KEY` and `SKILL_MODEL`.
+4. Deploy. The build runs `npm ci --include=dev && npm run build`; the start command applies database migrations automatically.
+5. Open the service's **Environment** tab and copy the generated `API_AUTH_TOKEN`. Open the site and paste it on the sign-in screen.
+
+Notes:
+
+- **Plan.** The Blueprint uses the **Starter** instance. The free instance works for demos, but it sleeps after 15 minutes without visitors, which pauses batches until the next visit (unfinished videos then resume).
+- **Region.** `singapore`, next to a Neon database in `ap-southeast-1`. Change both together if you move.
+- **One instance.** With `QUEUE_DRIVER=memory`, run a single instance. To scale out, add Redis and set `QUEUE_DRIVER=bullmq` and `REDIS_URL`.
+- **Disk.** Render's disk is temporary, so the Blueprint sets `MEDIA_RETENTION_HOURS=0` (downloaded media is deleted once a video is matched).
+- **Skill.** The scriptwriter skill is not in this repository. For automatic scripts on Render, add the skill folder to the repository (e.g. `skills/scriptwriter-skill/`) and set `SKILL_DIR` to it.
+- **Video downloads** from cloud servers can be blocked or rate-limited by Facebook; spreadsheets with `transcript` and `screenplay` columns don't download anything. The Linux build of yt-dlp may need Python 3 on the server; this has not been verified on Render.
 
 ---
 

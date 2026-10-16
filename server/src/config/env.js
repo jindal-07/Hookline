@@ -207,7 +207,9 @@ export function checkConfig(cfg) {
   const warnings = [];
   if (!cfg.databaseUrl) errors.push("DATABASE_URL is required (PostgreSQL connection string).");
   if (cfg.queueDriver === "bullmq" && !cfg.redisUrl) errors.push("REDIS_URL is required when QUEUE_DRIVER=bullmq.");
-  if (cfg.queueDriver === "memory" && cfg.env === "production") warnings.push("QUEUE_DRIVER=memory is for tests/local development only — jobs do not survive restarts.");
+  if (cfg.queueDriver === "memory" && cfg.env === "production") warnings.push("QUEUE_DRIVER=memory: fine for a single server (unfinished videos resume after a restart), but run only one instance. Use bullmq + Redis to scale out.");
+  if (cfg.env === "production" && !process.env.API_AUTH_TOKEN && process.env.ALLOW_PUBLIC_API !== "true")
+    errors.push("API_AUTH_TOKEN is required in production: without it anyone who finds the URL can run batches on your API keys. (Set ALLOW_PUBLIC_API=true only behind your own access control.)");
   if (cfg.providers.transcriber === "assemblyai" && !cfg.assemblyai.apiKey) warnings.push("ASSEMBLYAI_API_KEY is not set — transcription jobs will fail until it is configured.");
   if (cfg.providers.analyzer === "gemini" && !cfg.gemini.apiKey) warnings.push("GEMINI_API_KEY is not set — screenplay analysis jobs will fail until it is configured.");
   if (cfg.providers.embedding === "hash") warnings.push("EMBEDDING_PROVIDER=hash: lexical fallback, not semantic. Matching scores are less reliable — configure gemini or local embeddings.");

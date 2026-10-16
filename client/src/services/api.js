@@ -1,6 +1,15 @@
 // Thin API client. All scoring/threshold decisions happen on the server — the client only displays them.
 const token = () => { try { return localStorage.getItem("apiToken") || ""; } catch { return ""; } };
 
+/** Access token for servers started with API_AUTH_TOKEN (kept in this browser only). */
+export const authToken = {
+  get: token,
+  set(value) { try { localStorage.setItem("apiToken", value); } catch { /* private mode */ } },
+  clear() { try { localStorage.removeItem("apiToken"); } catch { /* private mode */ } },
+};
+/** Fired when the server rejects the token, so the app can show the sign-in screen. */
+export const AUTH_REQUIRED_EVENT = "hookline:auth-required";
+
 export class ApiError extends Error {
   constructor(status, body) {
     super(body?.error?.message || `Request failed (${status})`);
@@ -16,6 +25,7 @@ async function request(path, { method = "GET", body, form } = {}) {
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const res = await fetch(`/api${path}`, { method, headers, body: form || (body !== undefined ? JSON.stringify(body) : undefined) });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401) window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT));
   if (!res.ok) throw new ApiError(res.status, data);
   return data;
 }
@@ -71,6 +81,7 @@ export const downloads = {
 /** Download through fetch so the auth header is sent, then save via a blob link. */
 export async function downloadFile(url) {
   const res = await fetch(url, { headers: token() ? { Authorization: `Bearer ${token()}` } : {} });
+  if (res.status === 401) window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT));
   if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})));
   const name = res.headers.get("Content-Disposition")?.match(/filename="?([^"]+)"?/)?.[1] || "export";
   const blob = await res.blob();

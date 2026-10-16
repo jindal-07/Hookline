@@ -174,7 +174,11 @@ describe("REST API", () => {
     try {
       await request(app).get("/api/stats").expect(401);
       await request(app).get("/api/stats").set("Authorization", "Bearer s3cret-token").expect(200);
-      await request(app).get("/api/health").expect(200); // health stays open for probes
+      const pub = await request(app).get("/api/health").expect(200); // health stays open for probes…
+      expect(Object.keys(pub.body)).toEqual(["ok"]);               // …but reveals nothing beyond up/down
+      const full = await request(app).get("/api/health").set("Authorization", "Bearer s3cret-token").expect(200);
+      expect(full.body.providers).toBeDefined();
+      await request(app).get("/api/events?token=wrong").expect(401);
     } finally {
       delete process.env.API_AUTH_TOKEN;
     }
