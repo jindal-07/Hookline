@@ -6,7 +6,8 @@ services:
     name: hookline
     runtime: node
     region: singapore          # next to the Neon database (ap-southeast-1)
-    plan: starter              # "free" works for demos but sleeps after 15 min idle, pausing batches
+    plan: free                 # free: sleeps after 15 min without visitors (batches pause, then resume on the next visit).
+                               # Change to "starter" (paid) to keep it awake for long batches.
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health

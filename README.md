@@ -407,7 +407,7 @@ The repository includes a [`render.yaml`](render.yaml) Blueprint: one web servic
 
 Notes:
 
-- **Plan.** The Blueprint uses the **Starter** instance. The free instance works for demos, but it sleeps after 15 minutes without visitors, which pauses batches until the next visit (unfinished videos then resume).
+- **Plan.** The Blueprint uses Render's **free** instance (512 MB, shared CPU). It sleeps after 15 minutes without visitors, which pauses batches until the next visit (unfinished videos then resume), and the first request after sleeping takes about a minute. For long batches, change `plan: free` to `plan: starter` (paid) in `render.yaml`.
 - **Region.** `singapore`, next to a Neon database in `ap-southeast-1`. Change both together if you move.
 - **One instance.** With `QUEUE_DRIVER=memory`, run a single instance. To scale out, add Redis and set `QUEUE_DRIVER=bullmq` and `REDIS_URL`.
 - **Disk.** Render's disk is temporary, so the Blueprint sets `MEDIA_RETENTION_HOURS=0` (downloaded media is deleted once a video is matched).
