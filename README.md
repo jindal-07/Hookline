@@ -265,7 +265,7 @@ The app can also learn from your own results and write **new standalone episodes
    - `bad` labels: bad, flop, poor, low, 0
    - Every row must be labelled. Columns named `label`, `result` or `class` are also accepted in place of `performance`.
 2. **Same analysis pipeline.** Each video is downloaded, transcribed (AssemblyAI) and analysed (Gemini, which now also returns a **subgenre**), then matched. Training videos get Story DNA but **no per-video script**.
-   **Already have transcripts and screenplays?** Add `transcript`, `screenplay` and (optionally) `duration_sec` columns to the training sheet (`.xlsx`, `.xls` or UTF-8 `.csv`). Those rows are not downloaded or transcribed again. Gemini reads the screenplay **text** and fills in the same analysis (text only, about $0.03–0.04 per video), and your transcript is stored for matching and the originality check. Rows without screenplay text go through the normal video pipeline. Common encoding damage such as `‚Äô` is repaired on import.
+   - **Already have transcripts and screenplays?** Add `transcript`, `screenplay` and (optionally) `duration_sec` columns to the training sheet (`.xlsx`, `.xls` or UTF-8 `.csv`). Those rows are not downloaded or transcribed again. Gemini reads the screenplay **text** and fills in the same analysis (text only, about $0.03–0.04 per video), and your transcript is stored for matching and the originality check. Rows without screenplay text go through the normal video pipeline. Common encoding damage such as `‚Äô` is repaired on import.
 3. **Review the analysed sheet.** When a training batch finishes, its batch page shows one row per video with what AssemblyAI + Gemini found: label, genre, subgenre, length, scenes, language, hook, pacing, ending and emotional arc (`GET /api/batches/:id/analysis`, also downloadable as CSV). Untick any rows you don't want, then click **Build dataset** (`POST /api/datasets` with `excludeVideoIds`). Nothing is built automatically. The deterministic `DatasetBuilder` compares best and bad videos:
    - **Genres and subgenres:** win rate (share of best), smoothed so tiny groups can't top the ranking, with small groups flagged.
    - **Length:** typical length and interquartile range of best versus bad videos, plus the duration "sweet spot".
@@ -277,7 +277,7 @@ The app can also learn from your own results and write **new standalone episodes
    - **Checks.** Every script is checked for originality against **all** training videos' dialogue and character names, and for the skill's output format (`## Scene N - INT./EXT.` headings, at least 9 beat candidates, no frontmatter).
    - **Output.** Download as a Word document (`.docx`) or PDF in standard screenplay layout, rewrite, or paste an edited version back in. PDF of non-Latin scripts (e.g. Hindi) needs a Unicode font on the server; one is found automatically on Windows, or set `PDF_FONT_PATH`.
 
-Endpoints: `POST /api/datasets`, `GET /api/datasets/latest`, `GET /api/datasets/:id/playbook?genre=&subgenre=`, `GET|POST /api/scripts`, `GET /api/scripts/:id`, `POST /api/scripts/:id/regenerate|import`, `GET /api/scripts/:id/download`, `DELETE /api/scripts/:id`.
+Endpoints: `POST /api/datasets`, `GET /api/datasets/latest`, `GET /api/datasets/:id/playbook?genre=&subgenre=`, `GET|POST /api/scripts`, `GET /api/scripts/:id`, `POST /api/scripts/:id/regenerate|import`, `GET /api/scripts/:id/download?format=docx|pdf|md`, `DELETE /api/scripts/:id`.
 
 The demo includes `server/storage/demo/training-videos.xlsx`: 20 labelled videos across four genres.
 
@@ -413,5 +413,3 @@ Only download videos you are authorised to access. The downloader does not bypas
 3. Choose embeddings (`EMBEDDING_PROVIDER=gemini` or `local`) and run `npm run calibrate -w server`.
 4. Configure the skill (`SKILL_MODE`, `SKILL_DIR`, `ANTHROPIC_API_KEY`), or use `manual` mode.
 5. Set `API_AUTH_TOKEN` before exposing the app to anyone else.
-#   H o o k l i n e  
- 
