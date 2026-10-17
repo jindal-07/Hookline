@@ -10,6 +10,7 @@ import videos from "./routes/videos.js";
 import system from "./routes/system.js";
 import datasets from "./routes/datasets.js";
 import scripts from "./routes/scripts.js";
+import authRoutes from "./routes/auth.js";
 import { apiLimiter, auth, errorHandler } from "./middleware/index.js";
 
 export function createApp() {
@@ -33,6 +34,7 @@ export function createApp() {
 
   const api = express.Router();
   api.use(apiLimiter);
+  api.use("/auth", authRoutes); // sign-in endpoints stay reachable without a session
   api.use(auth);
   api.use("/batches", batches);
   api.use("/videos", videos);

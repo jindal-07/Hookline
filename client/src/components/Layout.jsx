@@ -6,7 +6,7 @@ import { Logo, LogoMark } from "./Logo.jsx";
 import { useTheme, useEvents } from "../hooks/index.js";
 import { Drawer, IconButton, Tooltip } from "./controls.jsx";
 import { Toggle } from "./forms.jsx";
-import { authToken } from "../services/api.js";
+import { useAuth } from "./AuthGate.jsx";
 
 const NAV = [
   { to: "/", label: "Overview", icon: "dashboard", end: true },
@@ -41,6 +41,7 @@ function LiveIndicator({ live, compact }) {
 
 /** Sidebar contents — shared by the desktop rail and the mobile drawer. */
 function Sidebar({ theme, toggleTheme, live, onClose }) {
+  const { required, signOut } = useAuth();
   return (
     <div className="scope-nav pt-safe flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between gap-2 px-4 pb-4 pt-5">
@@ -57,8 +58,8 @@ function Sidebar({ theme, toggleTheme, live, onClose }) {
           <LiveIndicator live={live} />
           <Toggle checked={theme === "dark"} onChange={toggleTheme} label="Dark mode" className="pr-1 text-xs text-nav-fg" />
         </div>
-        {authToken.get() && (
-          <button type="button" onClick={() => { authToken.clear(); location.assign("/"); }}
+        {required && (
+          <button type="button" onClick={signOut}
             className="mt-1 flex min-h-10 w-full items-center gap-2 rounded-xl px-2 text-xs font-bold text-nav-fg transition-colors hover:bg-white/5 hover:text-white">
             <Icon name="arrowLeft" className="size-4" />Sign out
           </button>

@@ -169,6 +169,29 @@ describe("REST API", () => {
     expect(received).not.toContain('"video_id":"x"');
   });
 
+  it("password wall: sign in with APP_PASSWORD, session cookie grants access, sign out ends it", async () => {
+    process.env.APP_PASSWORD = "a-long-shared-passphrase";
+    try {
+      expect((await request(app).get("/api/auth/session").expect(200)).body).toEqual({ required: true, authenticated: false });
+      await request(app).get("/api/stats").expect(401);
+      await request(app).get("/api/events").expect(401);
+      expect(Object.keys((await request(app).get("/api/health").expect(200)).body)).toEqual(["ok"]);
+      await request(app).post("/api/auth/login").send({ password: "wrong" }).expect(401);
+      const ok = await request(app).post("/api/auth/login").send({ password: "a-long-shared-passphrase" }).expect(200);
+      const cookie = ok.headers["set-cookie"][0];
+      expect(cookie).toMatch(/hookline_session=.+; Path=\/; HttpOnly; SameSite=Lax/);
+      const jar = cookie.split(";")[0];
+      await request(app).get("/api/stats").set("Cookie", jar).expect(200);
+      expect((await request(app).get("/api/auth/session").set("Cookie", jar)).body.authenticated).toBe(true);
+      expect((await request(app).get("/api/health").set("Cookie", jar)).body.providers).toBeDefined();
+      await request(app).get("/api/stats").set("Cookie", "hookline_session=9999999999.forged").expect(401);
+      const out = await request(app).post("/api/auth/logout").set("Cookie", jar).expect(200);
+      expect(out.headers["set-cookie"][0]).toMatch(/Max-Age=0/);
+    } finally {
+      delete process.env.APP_PASSWORD;
+    }
+  });
+
   it("requires a bearer token when API_AUTH_TOKEN is set", async () => {
     process.env.API_AUTH_TOKEN = "s3cret-token";
     try {

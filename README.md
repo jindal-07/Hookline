@@ -201,7 +201,8 @@ Every variable is documented in [`.env.example`](.env.example), and the server v
 | `MATCH_THRESHOLD`, `*_WEIGHT`, `MIN_MATCH_CONFIDENCE` | Scoring defaults. Editable later in the dashboard |
 | `MAX_CONCURRENT_JOBS`, `CONCURRENCY_*` | Per-stage concurrency to respect provider rate limits |
 | `MAX_VIDEO_DURATION_SECONDS`, `MAX_VIDEO_SIZE_MB`, `MEDIA_RETENTION_HOURS` | Media limits and clean-up |
-| `API_AUTH_TOKEN` | Bearer-token auth for the API. Set it whenever more than one person can reach the app |
+| `APP_PASSWORD` | Password wall for the web app (sign-in screen). Required in production |
+| `API_AUTH_TOKEN` | Optional bearer token for programmatic API access |
 
 ---
 
@@ -389,7 +390,7 @@ The suite needs no API keys or paid calls. It starts a throwaway UTF8 PostgreSQL
 - **Inputs and media:** zod validation on every route, rate limiting, helmet with a strict CSP, `spawn` with argument arrays (no shell), FFmpeg and download timeouts, safe id-based filenames, media paths never exposed by the API, and automatic media clean-up.
 - **Exports:** cells that could execute as spreadsheet formulas are neutralised.
 - **Untrusted content:** video-derived text and AI output are treated as untrusted. Prompts tell Gemini and the skill to treat embedded instructions as content, the skill has no write, shell or web tools, and React escapes everything rendered.
-- **Authentication:** bearer-token auth via `API_AUTH_TOKEN`, with a sign-in screen in the web app (the token is kept in the browser's local storage). It is optional locally but **required in production**: the server refuses to start with `NODE_ENV=production` and no token, unless `ALLOW_PUBLIC_API=true` is set behind your own access control. Without the token, `/api/health` only reports up or down.
+- **Password wall:** set `APP_PASSWORD` and the web app shows a sign-in screen. A correct password sets a signed, HttpOnly, `SameSite=Lax` session cookie (Secure in production) valid for 30 days; sign-in attempts are rate-limited to 10 per 15 minutes per IP. Sessions survive restarts, and changing the password signs everyone out. Optional `API_AUTH_TOKEN` allows programmatic access with `Authorization: Bearer …`. A password (or token) is optional locally but **required in production**: the server refuses to start with `NODE_ENV=production` and neither set, unless `ALLOW_PUBLIC_API=true` is set behind your own access control. Signed out, `/api/health` only reports up or down.
 
 Only download videos you are authorised to access. The downloader does not bypass authentication, DRM or platform restrictions; `YTDLP_COOKIES_FILE` is for videos *you* are allowed to view.
 
@@ -401,9 +402,9 @@ The repository includes a [`render.yaml`](render.yaml) Blueprint: one web servic
 
 1. Push the repository to GitHub (private is recommended).
 2. In Render: **New → Blueprint**, pick the repository. Render reads `render.yaml`.
-3. Fill in the secret values when prompted: `DATABASE_URL` (Neon pooled), `DATABASE_URL_UNPOOLED` (Neon direct), `GEMINI_API_KEY`, `ASSEMBLYAI_API_KEY`, and optionally `ANTHROPIC_API_KEY` and `SKILL_MODEL`.
+3. Fill in the secret values when prompted: `APP_PASSWORD` (the sign-in password, 12+ characters), `DATABASE_URL` (Neon pooled), `DATABASE_URL_UNPOOLED` (Neon direct), `GEMINI_API_KEY`, `ASSEMBLYAI_API_KEY`, and optionally `ANTHROPIC_API_KEY` and `SKILL_MODEL`.
 4. Deploy. The build runs `npm ci --include=dev && npm run build`; the start command applies database migrations automatically.
-5. Open the service's **Environment** tab and copy the generated `API_AUTH_TOKEN`. Open the site and paste it on the sign-in screen.
+5. Open the site and sign in with the `APP_PASSWORD` you set. Browsers stay signed in for 30 days; changing `APP_PASSWORD` signs everyone out.
 
 Notes:
 
@@ -434,4 +435,4 @@ Notes:
 2. Set a new `GEMINI_API_KEY` and an `ASSEMBLYAI_API_KEY`.
 3. Choose embeddings (`EMBEDDING_PROVIDER=gemini` or `local`) and run `npm run calibrate -w server`.
 4. Configure the skill (`SKILL_MODE`, `SKILL_DIR`, `ANTHROPIC_API_KEY`), or use `manual` mode.
-5. Set `API_AUTH_TOKEN` before exposing the app to anyone else.
+5. Set `APP_PASSWORD` before exposing the app to anyone else.

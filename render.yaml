@@ -25,8 +25,8 @@ services:
         value: memory            # single instance; unfinished videos resume after restarts (state is in Neon)
       - key: RUN_WORKERS_IN_API
         value: "true"
-      - key: API_AUTH_TOKEN      # the sign-in token for the web app: copy it from the Render dashboard
-        generateValue: true
+      - key: APP_PASSWORD        # the password for the sign-in screen (12+ characters). Set it yourself.
+        sync: false
       - key: DATABASE_URL        # Neon pooled connection string
         sync: false
       - key: DATABASE_URL_UNPOOLED # Neon direct connection string (migrations)

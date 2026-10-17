@@ -1,13 +1,7 @@
 // Thin API client. All scoring/threshold decisions happen on the server — the client only displays them.
 const token = () => { try { return localStorage.getItem("apiToken") || ""; } catch { return ""; } };
 
-/** Access token for servers started with API_AUTH_TOKEN (kept in this browser only). */
-export const authToken = {
-  get: token,
-  set(value) { try { localStorage.setItem("apiToken", value); } catch { /* private mode */ } },
-  clear() { try { localStorage.removeItem("apiToken"); } catch { /* private mode */ } },
-};
-/** Fired when the server rejects the token, so the app can show the sign-in screen. */
+/** Fired when the server rejects a request (no or expired session), so the app can show the sign-in screen. */
 export const AUTH_REQUIRED_EVENT = "hookline:auth-required";
 
 export class ApiError extends Error {
@@ -36,6 +30,9 @@ const qs = (params = {}) => {
 };
 
 export const api = {
+  authSession: () => request("/auth/session"),
+  login: (password) => request("/auth/login", { method: "POST", body: { password } }),
+  logout: () => request("/auth/logout", { method: "POST" }),
   stats: () => request("/stats"),
   health: () => request("/health"),
   settings: () => request("/settings"),

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { AppError, badRequest } from "../utils/errors.js";
 import { logger } from "../utils/logger.js";
 import { config } from "../config/env.js";
+import { passwordRequired, hasValidSession } from "../services/auth/session.js";
 
 /** Validate req[part] against a zod schema; replaces it with the parsed value. */
 export const validateReq = (part, schema) => (req, _res, next) => {
@@ -28,13 +29,17 @@ export const apiLimiter = rateLimit({ windowMs: 60_000, limit: 600, standardHead
 export const uploadLimiter = rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: "draft-7", legacyHeaders: false, message: { error: { code: "RATE_LIMITED", message: "Too many uploads — try again in a minute" } } });
 
 /**
- * Optional bearer-token auth (API_AUTH_TOKEN). Enable it whenever the app is reachable by more than
- * one person. EventSource can't send headers, so /api/events also accepts ?token=.
+ * Access control. The web app signs in with APP_PASSWORD (session cookie, sent automatically with every
+ * request including EventSource). API_AUTH_TOKEN optionally allows programmatic access with a bearer token
+ * (EventSource can't send headers, so /api/events also accepts ?token=). With neither set, the API is open
+ * (local development only — production refuses to start that way).
  */
 /** True when no token is configured, or the request carries the right one (header, or ?token= for /events). */
 export function isAuthorized(req) {
   const token = process.env.API_AUTH_TOKEN;
-  if (!token) return true;
+  if (!token && !passwordRequired()) return true;
+  if (passwordRequired() && hasValidSession(req)) return true;
+  if (!token) return false;
   const given = (req.headers.authorization || "").replace(/^Bearer\s+/i, "") || (req.path === "/events" ? String(req.query.token || "") : "");
   const a = Buffer.from(given), b = Buffer.from(token);
   return a.length === b.length && timingSafeEqual(a, b);
