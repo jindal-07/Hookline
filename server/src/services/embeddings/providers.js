@@ -4,6 +4,7 @@ import { GoogleGenAI } from "@google/genai";
 import { EmbeddingService, l2normalize, DEFAULT_CALIBRATION } from "./EmbeddingService.js";
 import { tokenize, contentTokens } from "../matching/text.js";
 import { classifyError, permanent } from "../../utils/errors.js";
+import { recordUsage } from "../usage/usage.js";
 
 /** Google Gemini text embeddings (multilingual, 100+ languages). */
 export class GeminiEmbeddingService extends EmbeddingService {
@@ -27,6 +28,7 @@ export class GeminiEmbeddingService extends EmbeddingService {
           config: { taskType: "SEMANTIC_SIMILARITY", outputDimensionality: this.dimensions },
         });
         out.push(...r.embeddings.map(e => l2normalize(e.values))); // reduced dims must be re-normalised
+        await recordUsage({ provider: "gemini", operation: "embeddings", model: this.model, input_tokens: Math.ceil(chunk.reduce((t, s) => t + String(s).length, 0) / 4), metadata: { texts: chunk.length } });
       } catch (e) {
         throw classifyError(e);
       }

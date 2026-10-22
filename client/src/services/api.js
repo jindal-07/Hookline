@@ -36,6 +36,8 @@ export const api = {
   stats: () => request("/stats"),
   health: () => request("/health"),
   settings: () => request("/settings"),
+  usage: (period = "30d") => request(`/usage${qs({ period })}`),
+  saveUsageSettings: (body) => request("/usage/settings", { method: "PATCH", body }),
   saveSettings: (scoring) => request("/settings", { method: "PATCH", body: scoring }),
 
   uploadBatch: (file, purpose = "generation") => { const f = new FormData(); f.append("purpose", purpose); f.append("file", file); return request("/batches", { method: "POST", form: f }); },

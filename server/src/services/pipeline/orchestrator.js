@@ -231,7 +231,7 @@ const transcribe = stageHandler(STAGES.TRANSCRIBE, async (video) => {
   }
   if (!video.audio_path || !existsSync(video.audio_path)) { await enqueue(STAGES.AUDIO, video.id); return { reextract: true }; }
   await setVideo(video, { transcript_status: TASK_STATUS.RUNNING, status: VIDEO_STATUS.TRANSCRIBING, current_stage: STAGES.TRANSCRIBE });
-  const r = await providers.transcriber().transcribe(video.audio_path, { videoKey: video.normalized_url });
+  const r = await providers.transcriber().transcribe(video.audio_path, { videoKey: video.normalized_url, videoId: video.id });
   const normalized = await new TranscriptNormalizer().normalize({ raw: r.raw, sentences: r.sentences, videoId: video.id });
   const check = validate("transcript", normalized);
   if (!check.valid) throw permanent("TRANSCRIPT_INVALID", `Normalized transcript failed validation: ${check.errors.slice(0, 3).join("; ")}`);

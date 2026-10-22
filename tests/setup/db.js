@@ -13,6 +13,6 @@ export async function setupTestDb() {
 export async function resetDb() {
   const { sequelize } = db();
   await sequelize.query(
-    "TRUNCATE batches, videos, transcripts, screenplay_analyses, match_results, story_dna, generated_scripts, processing_logs, settings, embedding_cache, datasets, scripts RESTART IDENTITY CASCADE"
+    "TRUNCATE batches, videos, transcripts, screenplay_analyses, match_results, story_dna, generated_scripts, processing_logs, settings, embedding_cache, datasets, scripts, api_usage RESTART IDENTITY CASCADE"
   );
 }

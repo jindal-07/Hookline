@@ -119,6 +119,25 @@ export function defineModels(sequelize) {
     metadata: { type: JSONB, allowNull: false, defaultValue: {} },
   }, { ...createdOnly, tableName: "processing_logs" });
 
+  const ApiUsage = sequelize.define("ApiUsage", {
+    id,
+    provider: { type: STRING(16), allowNull: false },
+    operation: { type: STRING(32), allowNull: false },
+    model: { type: STRING(128) },
+    requests: { type: INTEGER, allowNull: false, defaultValue: 1 },
+    input_tokens: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+    output_tokens: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+    cached_tokens: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+    audio_seconds: { type: DataTypes.DECIMAL(12, 3), allowNull: false, defaultValue: 0 },
+    cost_usd: { type: DataTypes.DECIMAL(14, 6), allowNull: false, defaultValue: 0 },
+    cost_source: { type: STRING(16), allowNull: false },
+    succeeded: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+    video_id: { type: DataTypes.UUID },
+    batch_id: { type: DataTypes.UUID },
+    script_id: { type: DataTypes.UUID },
+    metadata: { type: JSONB, allowNull: false, defaultValue: {} },
+  }, { ...createdOnly, tableName: "api_usage" });
+
   const Setting = sequelize.define("Setting", {
     key: { type: STRING(64), primaryKey: true },
     value: { type: JSONB, allowNull: false },
@@ -171,7 +190,7 @@ export function defineModels(sequelize) {
   }
   Batch.hasMany(ProcessingLog, { foreignKey: "batch_id", as: "logs", onDelete: "CASCADE" });
 
-  return { Batch, Video, Transcript, ScreenplayAnalysis, MatchResult, StoryDNA, GeneratedScript, ProcessingLog, Setting, EmbeddingCache, Dataset, Script };
+  return { Batch, Video, Transcript, ScreenplayAnalysis, MatchResult, StoryDNA, GeneratedScript, ProcessingLog, Setting, EmbeddingCache, Dataset, Script, ApiUsage };
 }
 
 let state = null;

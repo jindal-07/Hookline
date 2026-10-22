@@ -2,6 +2,7 @@
 // sentences, language detection and confidence. Never translates.
 import { AssemblyAI } from "assemblyai";
 import { permanent, transient, classifyError } from "../../utils/errors.js";
+import { recordUsage } from "../usage/usage.js";
 
 export class Transcriber {
   /** @returns {Promise<{ raw: object, sentences: object[]|null, metadata: object }>} */
@@ -18,7 +19,7 @@ export class AssemblyAITranscriber extends Transcriber {
   }
   get name() { return "assemblyai"; }
 
-  async transcribe(audioPath, { languageCode, speakersExpected } = {}) {
+  async transcribe(audioPath, { languageCode, speakersExpected, videoId } = {}) {
     const started = Date.now();
     const params = {
       audio: audioPath,
@@ -51,6 +52,8 @@ export class AssemblyAITranscriber extends Transcriber {
         throw permanent("TRANSCRIPTION_REJECTED", msg);
       throw transient("TRANSCRIPTION_FAILED", msg);
     }
+
+    await recordUsage({ provider: "assemblyai", operation: "transcription", model: raw.speech_model_used ?? null, audio_seconds: Number(raw.audio_duration) || 0, video_id: videoId, metadata: { transcript_id: raw.id } });
 
     let sentences = null;
     try {

@@ -7,6 +7,7 @@ import { permanent, transient, classifyError, withTimeout } from "../../utils/er
 import { validate, parseJsonLoose } from "../../utils/schema.js";
 import { FFMPEG_PATH, probe, run, safeName } from "../video/media.js";
 import { mergeChunkAnalyses } from "./ScreenplayNormalizer.js";
+import { recordUsage } from "../usage/usage.js";
 
 export const ANALYSIS_PROMPT = `You are a script supervisor and story analyst. Watch the ENTIRE video — picture and soundtrack — and produce a structured screenplay analysis that matches the JSON schema exactly.
 
@@ -55,7 +56,7 @@ export class GeminiVideoAnalyzer extends VideoAnalyzer {
     const duration = durationSeconds ?? (await probe(videoPath)).durationSeconds;
     // Long videos: analyse in chunks and merge (Files API + model limits are verified per request).
     if (duration > this.maxSinglePassSeconds) return this.analyzeChunked(videoPath, { videoId, duration, started });
-    const r = await this.analyzeOne(videoPath, { duration });
+    const r = await this.analyzeOne(videoPath, { duration, videoId });
     return { raw: r.raw, analysis: r.analysis, metadata: { ...r.metadata, chunked: false, latency_ms: Date.now() - started } };
   }
 
@@ -69,7 +70,7 @@ export class GeminiVideoAnalyzer extends VideoAnalyzer {
         const { code, stderr } = await run(FFMPEG_PATH, ["-hide_banner", "-loglevel", "error", "-y", "-ss", String(offset), "-i", videoPath, "-t", String(this.chunkSeconds), "-c", "copy", "-avoid_negative_ts", "make_zero", out], { timeoutMs: 300_000 });
         if (code !== 0) throw transient("CHUNK_FAILED", `Could not split video: ${stderr.slice(0, 200)}`);
         const len = Math.min(this.chunkSeconds, duration - offset);
-        const r = await this.analyzeOne(out, { duration: len, chunk: { index: i, offset, total: duration } });
+        const r = await this.analyzeOne(out, { duration: len, chunk: { index: i, offset, total: duration }, videoId });
         parts.push({ offset, ...r });
       }
     } finally {
@@ -91,17 +92,17 @@ export class GeminiVideoAnalyzer extends VideoAnalyzer {
    * Analyse a written screenplay of a video (no video file). Same schema, validation and retries as video
    * analysis; text only, so it costs a small fraction of analysing the footage.
    */
-  async analyzeScreenplayText(text, { durationSeconds } = {}) {
+  async analyzeScreenplayText(text, { durationSeconds, videoId } = {}) {
     const started = Date.now();
     const doc = `<screenplay>\n${String(text).slice(0, 200_000)}\n</screenplay>`;
-    const r = await this.generateValidated((retryNote) => createUserContent([
+    const r = await this.generateValidated({ operation: "text_analysis", videoId }, (retryNote) => createUserContent([
       [TEXT_ANALYSIS_PROMPT, durationSeconds ? `The video is ${Math.round(durationSeconds)} seconds long.` : "", retryNote, doc].filter(Boolean).join("\n\n"),
     ]));
     return { raw: r.raw, analysis: r.analysis, metadata: { ...r.metadata, source: "screenplay_text", chunked: false, latency_ms: Date.now() - started } };
   }
 
   /** Call Gemini with the screenplay schema; on malformed output, retry with the validation errors. */
-  async generateValidated(contentsFor) {
+  async generateValidated(usageCtx, contentsFor) {
     const attempts = [];
     let lastErrors = [];
     for (let attempt = 1; attempt <= this.maxValidationRetries + 1; attempt++) {
@@ -125,6 +126,11 @@ export class GeminiVideoAnalyzer extends VideoAnalyzer {
       const parsed = parseJsonLoose(text);
       const check = parsed.ok ? validate("screenplay", parsed.value) : { valid: false, errors: [parsed.error] };
       attempts.push({ attempt, valid: check.valid, errors: check.errors, finish_reason: res.candidates?.[0]?.finishReason ?? null, usage });
+      await recordUsage({
+        provider: "gemini", operation: usageCtx.operation, model: this.model, input_tokens: usage.prompt_tokens, output_tokens: usage.output_tokens,
+        cached_tokens: res.usageMetadata?.cachedContentTokenCount ?? 0, succeeded: check.valid, video_id: usageCtx.videoId,
+        metadata: { attempt, ...(check.valid ? {} : { rejected: "invalid output, retried" }) },
+      });
       if (check.valid)
         return { raw: { text, response_id: res.responseId ?? null }, analysis: parsed.value, metadata: { provider: this.name, model: this.model, attempts: attempts.length, attempt_log: attempts, usage: sumUsage(attempts) } };
       if (res.promptFeedback?.blockReason) throw permanent("ANALYSIS_BLOCKED", `Gemini blocked the request: ${res.promptFeedback.blockReason}`);
@@ -133,11 +139,11 @@ export class GeminiVideoAnalyzer extends VideoAnalyzer {
     throw transient("ANALYSIS_INVALID", `Gemini returned malformed analysis after ${attempts.length} attempts: ${lastErrors.slice(0, 3).join("; ")}`, { details: { attempts } });
   }
 
-  async analyzeOne(filePath, { duration, chunk } = {}) {
+  async analyzeOne(filePath, { duration, chunk, videoId } = {}) {
     let file;
     try {
       file = await withTimeout(this.upload(filePath), Math.min(this.timeoutMs, 600_000), "Gemini upload");
-      return await this.generateValidated((retryNote) => {
+      return await this.generateValidated({ operation: "video_analysis", videoId }, (retryNote) => {
         const prompt = [
           ANALYSIS_PROMPT,
           `The video is ${Math.round(duration)} seconds long.`,

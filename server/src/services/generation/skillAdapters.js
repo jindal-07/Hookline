@@ -6,6 +6,7 @@ import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promi
 import { existsSync } from "node:fs";
 import { permanent, transient, classifyError } from "../../utils/errors.js";
 import { safeName } from "../video/media.js";
+import { recordUsage } from "../usage/usage.js";
 
 /** Trusted application requirements appended to the agent's system prompt (not the skill's method). */
 export const TRUSTED_REQUIREMENTS = `You are generating an ORIGINAL short-form script using the configured skill.
@@ -127,6 +128,19 @@ export class AgentSdkSkillAdapter extends SkillAdapter {
       throw classifyError(e);
     } finally {
       clearTimeout(timer);
+    }
+    if (result) {
+      const u = result.usage || {};
+      const target = String(ctx.videoId || "");
+      await recordUsage({
+        provider: "anthropic", operation: "script", model: init?.model ?? this.model ?? null, requests: result.num_turns ?? 1,
+        input_tokens: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0),
+        output_tokens: u.output_tokens || 0, cached_tokens: u.cache_read_input_tokens || 0,
+        reported_cost_usd: typeof result.total_cost_usd === "number" ? result.total_cost_usd : undefined,
+        succeeded: !result.is_error && result.subtype === "success",
+        ...(target.startsWith("script-") ? { script_id: target.slice(7) } : target ? { video_id: target } : {}),
+        metadata: { skill: skill.name, turns: result.num_turns ?? null },
+      });
     }
     if (!result) throw transient("SKILL_NO_RESULT", "The skill finished without a result");
     if (result.is_error || result.subtype !== "success") throw skillError(result);

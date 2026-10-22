@@ -6,6 +6,7 @@ import { Card, PageSkeleton, ErrorState, Alert, Badge, KeyValue, Spinner, InsetP
 import { FormField, SuffixInput } from "../components/forms.jsx";
 import { useToast } from "../components/controls.jsx";
 import Icon from "../components/Icons.jsx";
+import UsagePanel from "../components/UsagePanel.jsx";
 
 export default function Settings() {
   const { data, error, reload } = useApi(() => api.settings());
@@ -94,6 +95,7 @@ export default function Settings() {
           </Card>
         </div>
       </div>
+      <div className="mt-5"><UsagePanel /></div>
     </>
   );
 }

@@ -6,9 +6,11 @@ import { queues } from "../queues/index.js";
 import { subscribe } from "../events/bus.js";
 import { providers } from "../services/registry.js";
 import { getScoringSettings, updateScoringSettings } from "../services/settings.js";
+import { usageSummary, updateUsageSettings } from "../services/usage/usage.js";
 import { dashboardStats } from "../services/queries.js";
 import { FFMPEG_PATH, FFPROBE_PATH } from "../services/video/media.js";
-import { asyncRoute, isAuthorized } from "../middleware/index.js";
+import { z } from "zod";
+import { asyncRoute, isAuthorized, validateReq } from "../middleware/index.js";
 import { SCORING_VERSION } from "@reelscript/shared";
 
 const r = Router();
@@ -25,6 +27,12 @@ async function providerStatus() {
     skill: { ...skill, mode: config.skill.mode },
   };
 }
+
+const usageQuery = z.object({ period: z.enum(["24h", "7d", "30d", "all"]).default("30d") });
+/** API usage per provider (Gemini, AssemblyAI, Anthropic): tokens, audio, cost, and credits left. */
+r.get("/usage", validateReq("query", usageQuery), asyncRoute(async (req, res) => res.json(await usageSummary({ period: req.validQuery.period }))));
+/** Update the price table and/or the credits added per provider. */
+r.patch("/usage/settings", asyncRoute(async (req, res) => res.json(await updateUsageSettings(req.body || {}))));
 
 r.get("/settings", asyncRoute(async (_req, res) => {
   res.json({ scoring: await getScoringSettings(), scoring_version: SCORING_VERSION, providers: await providerStatus(), limits: { max_upload_mb: Math.round(config.limits.maxUploadBytes / 1048576), max_rows: config.limits.maxRowsPerBatch, max_video_duration_seconds: config.limits.maxVideoDurationSeconds, media_retention_hours: config.storage.retentionHours } });

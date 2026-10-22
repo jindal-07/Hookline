@@ -417,6 +417,19 @@ Notes:
 
 ---
 
+## API usage and credits
+
+**Settings → API usage & credits** shows every billable call this server made to Gemini, AssemblyAI and Anthropic, for the last 24 hours, 7 days, 30 days or all time:
+
+- **Recorded per call** in the `api_usage` table: tokens (input, output, cache reads) or audio seconds as the provider reports them, including failed or retried attempts, which are billed too.
+- **Cost:** Anthropic reports its own cost per run. Gemini and AssemblyAI calls are priced from the editable price table when they are recorded, so a later price change doesn't rewrite history. Gemini embeddings return no token count and are estimated (about 4 characters per token).
+- **Credits:** none of the providers offers an API for the remaining balance. Enter the credit you added and the date for each provider; Settings shows what's been used since and what's left.
+- **History:** Gemini analysis usage from before the ledger existed is backfilled from the processing logs.
+
+Endpoints: `GET /api/usage?period=24h|7d|30d|all`, `PATCH /api/usage/settings` with `{ prices, credits }`.
+
+---
+
 ## Known limitations and unverified integrations
 
 - **Not tested against live services:** AssemblyAI, Gemini analysis, Gemini embeddings, real Facebook downloads and the Claude Agent SDK. Their code follows the current SDK documentation and is tested with fake clients, but none of them ran against the real service:
