@@ -10,6 +10,7 @@ import { ManualSkillAdapter } from "../../server/src/services/generation/skillAd
 import { makeWorkbook } from "../fixtures/spreadsheets.js";
 import { baseScreenplay } from "../fixtures/matching.js";
 import { distinctVideos } from "../fixtures/media.js";
+import { recoverInFlight } from "../../server/src/services/pipeline/orchestrator.js";
 
 let env, app;
 const U = (n) => `https://www.facebook.com/reel/70000000000${String(n).padStart(2, "0")}`;
@@ -155,6 +156,14 @@ describe("training dataset + standalone scripts", () => {
     await request(app).get(`/api/scripts/${s.id}/download?format=txt`).expect(400);
   });
 
+  it("requeues a script whose job was lost in a restart (left RUNNING with nothing behind it)", async () => {
+    const { dataset } = await runTrainingBatch();
+    const stuck = await env.ctx.models.Script.create({ dataset_id: dataset.id, brief: { genre: "Drama", subgenre: "Family Drama", target_duration_seconds: 60, language: "hi" }, status: "RUNNING" });
+    expect(await recoverInFlight()).toBeGreaterThanOrEqual(1); // requeued (the memory queue picks it up right away)
+    await env.drain();
+    expect((await stuck.reload()).status).toBe("COMPLETED");
+  });
+
   it("rejects briefs for genres the dataset doesn't contain, and requires a dataset", async () => {
     await request(app).post("/api/scripts").send({ genre: "Drama" }).expect(400); // no dataset yet
     await runTrainingBatch();
@@ -172,6 +181,9 @@ describe("training dataset + standalone scripts", () => {
     const copied = "# Episode 01: Copy\n\n## Scene 1 - INT. Kitchen - Day\n\nअब नौकरानी अफसर बनेगी यह सपना देखो कोशिश करने में क्या बुराई है मैडम. " + "Meera cooks. ".repeat(20);
     const imp = await request(app).post(`/api/scripts/${id}/import`).send({ content: copied }).expect(200);
     expect(imp.body.status).toBe("REJECTED");
-    expect(imp.body.originality.issues.map(i => i.code)).toEqual(expect.arrayContaining(["REUSED_NAMES"]));
+    // The reused name is renamed automatically; the copied dialogue still rejects it.
+    expect(imp.body.originality.issues.map(i => i.code)).toEqual(["HIGH_OVERLAP"]);
+    expect(imp.body.generation_metadata.renamed).toEqual([expect.objectContaining({ from: "Meera" })]);
+    expect(imp.body.content).not.toMatch(/Meera/);
   });
 });

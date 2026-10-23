@@ -4,6 +4,7 @@ import { GENERATION_STATUS, SCRIPT_STATUS } from "@reelscript/shared";
 import { permanent } from "../../utils/errors.js";
 import { OriginalityValidator } from "./OriginalityValidator.js";
 import { STANDALONE_REQUIREMENTS } from "./skillAdapters.js";
+import { forbiddenNameWords, namesToAvoid, repairReusedNames } from "./NameRepair.js";
 
 export class ScriptGenerationService {
   /** @param {{ adapter: import('./skillAdapters.js').SkillAdapter, embeddings?: object, includeTranscriptSummary?: boolean, includeAnalysisOutline?: boolean }} opts */
@@ -26,7 +27,7 @@ export class ScriptGenerationService {
       const status = out.status === "AWAITING_MANUAL" ? GENERATION_STATUS.AWAITING_MANUAL : GENERATION_STATUS.DISABLED;
       return { status, content: null, metadata: { ...out.metadata, payload_fields: Object.keys(payload) }, originality: null };
     }
-    return this.finalize(out.content, { metadata: { ...out.metadata, payload_fields: Object.keys(payload) }, transcript, screenplayAnalysis, storyDNA });
+    return this.finalize(out.content, { metadata: { ...out.metadata, payload_fields: Object.keys(payload) }, transcript, screenplayAnalysis, storyDNA, language: payload.generation_options.language });
   }
 
   /**
@@ -38,30 +39,48 @@ export class ScriptGenerationService {
       task: "Write one original standalone episode script for short-form vertical video, guided by what worked in the team's best-performing videos.",
       brief,
       playbook,
+      // Character names used in the dataset's videos: the originality check rejects any of them.
+      avoid_names: namesToAvoid(corpus?.names),
     };
     const out = await this.adapter.invoke(payload, { videoId: `script-${scriptId}`, requirements: STANDALONE_REQUIREMENTS });
     if (out.status !== "COMPLETED") {
       return { status: out.status === "AWAITING_MANUAL" ? SCRIPT_STATUS.AWAITING_MANUAL : SCRIPT_STATUS.DISABLED, content: null, metadata: out.metadata, originality: null };
     }
-    return this.finalizeStandalone(out.content, { corpus, metadata: out.metadata });
+    return this.finalizeStandalone(out.content, { corpus, metadata: out.metadata, language: brief?.language });
   }
 
   /** Originality of a standalone script against the whole dataset corpus (+ basic format checks). */
-  async finalizeStandalone(content, { corpus, metadata = {} }) {
-    const originality = await this.validator.validate(content, corpusAsSource(corpus));
-    const format = formatChecks(content);
-    return { status: originality.passed ? SCRIPT_STATUS.COMPLETED : SCRIPT_STATUS.REJECTED, content, metadata: { ...metadata, format }, originality, title: format.title };
+  async finalizeStandalone(content, { corpus, metadata = {}, language }) {
+    const checked = await this.validateRepairingNames(content, corpusAsSource(corpus), language);
+    const format = formatChecks(checked.content);
+    return { status: checked.originality.passed ? SCRIPT_STATUS.COMPLETED : SCRIPT_STATUS.REJECTED, content: checked.content, metadata: { ...metadata, ...checked.metadata, format }, originality: checked.originality, title: format.title };
   }
 
   /** Validate an externally produced script (manual import) with the same rules. */
-  async finalize(content, { metadata = {}, transcript, screenplayAnalysis, storyDNA }) {
-    const originality = await this.validator.validate(content, { transcript, analysis: screenplayAnalysis, storyDna: storyDNA });
+  async finalize(content, { metadata = {}, transcript, screenplayAnalysis, storyDNA, language }) {
+    const source = { transcript, analysis: screenplayAnalysis, storyDna: storyDNA };
+    const checked = await this.validateRepairingNames(content, source, language || storyDNA?.format?.language);
     return {
-      status: originality.passed ? GENERATION_STATUS.COMPLETED : GENERATION_STATUS.REJECTED,
-      content,
-      metadata,
-      originality,
+      status: checked.originality.passed ? GENERATION_STATUS.COMPLETED : GENERATION_STATUS.REJECTED,
+      content: checked.content,
+      metadata: { ...metadata, ...checked.metadata },
+      originality: checked.originality,
     };
+  }
+
+  /**
+   * Originality check; a reused source character name is fixed in place (renamed throughout the script) and the
+   * script re-checked, instead of rejecting a script that is otherwise original. Renames go in metadata.renamed.
+   */
+  async validateRepairingNames(content, source, language) {
+    let originality = await this.validator.validate(content, source);
+    const reused = originality.metrics?.reused_names || [];
+    if (!reused.length) return { content, originality, metadata: {} };
+    const forbidden = forbiddenNameWords((source.analysis?.characters || []).map(c => c.label));
+    const repaired = repairReusedNames(content, reused, { forbidden, language });
+    if (!repaired.renames.length) return { content, originality, metadata: {} };
+    originality = await this.validator.validate(repaired.content, source);
+    return { content: repaired.content, originality, metadata: { renamed: repaired.renames.map(({ from, to }) => ({ from, to })) } };
   }
 
   /**
@@ -111,16 +130,22 @@ export function formatChecks(content) {
   const text = String(content || "");
   const scenes = (text.match(/^##\s*Scene\s+\d+/gim) || []).length;
   const beats = (text.match(/^\s*\d+\.\s*\*\*Beat\s+\d+/gim) || []).length;
+  const characters = /^##\s*(Main\s+)?Characters\b/im.test(text);
+  const locations = /^##\s*Locations?\b/im.test(text);
   const title = text.match(/^#\s+(?:Episode\s+\d+:\s*)?(.+?)\s*(?:\[.*\])?\s*$/m)?.[1]?.trim() || null;
   return {
     title,
     scene_count: scenes,
     beat_candidates: beats,
+    has_character_references: characters,
+    has_location_references: locations,
     has_frontmatter: FRONTMATTER.test(text),
     warnings: [
       ...(scenes === 0 ? ["No '## Scene N - INT./EXT. ...' headings found"] : []),
       ...(beats && beats < 9 ? [`Only ${beats} beat candidates (the skill asks for at least 9)`] : []),
       ...(FRONTMATTER.test(text) ? ["Contains frontmatter (the skill forbids it)"] : []),
+      ...(scenes && !characters ? ["No '## Main Characters' reference section"] : []),
+      ...(scenes && !locations ? ["No '## Locations' reference section"] : []),
     ],
   };
 }

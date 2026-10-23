@@ -20,16 +20,26 @@ if (process.env.AUTO_MIGRATE !== "false") {
   const applied = await migrateWithConfig(sequelize);
   if (applied.length) logger.info({ applied: applied.map(m => m.name) }, "migrations applied");
 }
+// Claim the port first. If another Hookline server already owns it, exit before starting any job workers:
+// a second server would otherwise process the same jobs in the background (duplicate, paid provider calls).
+const server = await new Promise((resolve) => {
+  const s = createApp().listen(config.port, config.host);
+  s.once("listening", () => resolve(s));
+  s.once("error", (err) => {
+    logger.error(err.code === "EADDRINUSE"
+      ? `Port ${config.port} is already in use — another Hookline server is probably running. Stop it first (only one server may process jobs).`
+      : `Could not start the API: ${err.message}`);
+    process.exit(1);
+  });
+});
+logger.info(`API listening on http://${config.host}:${config.port}`);
+
 await initQueues();
 await initEventBridge();
 if (config.runWorkersInApi || config.queueDriver === "memory") {
   const { startWorkers } = await import("./workers/index.js");
   await startWorkers(); // single-process mode (memory driver always runs workers in-process)
 }
-
-const server = createApp().listen(config.port, config.host, () => {
-  logger.info(`API listening on http://${config.host}:${config.port}`);
-});
 
 const shutdown = async (sig) => {
   logger.info({ sig }, "shutting down");

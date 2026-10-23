@@ -69,3 +69,54 @@ describe("script parser", () => {
     expect(splitHeading("INT. Kitchen")).toEqual({ setting: "INT. Kitchen", time: null });
   });
 });
+
+describe("character and location references", () => {
+  const WITH_REFS = `# Episode 02: The Ramp
+
+## Main Characters
+
+- **Desmond Webb**: 30s, wheelchair user, white shirt and tie
+- **Judge Harlan Voss**: 60s, bow tie, white mustache
+
+## Locations
+
+- **EXT. Downtown Bus Stop**: glass shelter, rain on the roof, sodium light
+- **INT. Route 9 Bus**: blue seats, ramp panel by the door
+
+## Scene 1 - EXT. Downtown Bus Stop - Rainy Morning
+
+Desmond rolls to the curb.
+
+## Scene 2 - INT. Route 9 Bus - Moving
+
+JUDGE VOSS
+Remove it.
+
+## Scene 3 - EXT. Downtown Bus Stop - Later
+
+The rain stops.`;
+
+  it("reads the Locations section and lists the scenes each character and location appears in", async () => {
+    const { parseScript, scriptReferences } = await import("../../shared/scriptParse.js");
+    const blocks = parseScript(WITH_REFS);
+    expect(blocks.filter(b => b.type === "location").map(l => l.name)).toEqual(["EXT. Downtown Bus Stop", "INT. Route 9 Bus"]);
+    expect(blocks.some(b => b.type === "action" && /glass shelter/.test(b.text))).toBe(false); // references stay out of the body
+    const r = scriptReferences(blocks);
+    expect(r.locationsDerived).toBe(false);
+    expect(r.locations.map(l => [l.name, l.scenes, l.times])).toEqual([
+      ["EXT. Downtown Bus Stop", [1, 3], ["Rainy Morning", "Later"]],
+      ["INT. Route 9 Bus", [2], ["Moving"]],
+    ]);
+    expect(r.cast.map(c => [c.name, c.scenes])).toEqual([["Desmond Webb", [1]], ["Judge Harlan Voss", [2]]]); // "Judge" ignored, matched by VOSS
+  });
+
+  it("derives locations from scene headings when the script has no Locations section", async () => {
+    const { parseScript, scriptReferences } = await import("../../shared/scriptParse.js");
+    const r = scriptReferences(parseScript(WITH_REFS.replace(/## Locations[\s\S]*?(?=## Scene 1)/, "")));
+    expect(r.locationsDerived).toBe(true);
+    expect(r.locations.map(l => [l.name, l.text, l.scenes])).toEqual([
+      ["EXT. Downtown Bus Stop", "Desmond rolls to the curb.", [1, 3]],
+      ["INT. Route 9 Bus", "", [2]],
+    ]);
+  });
+});

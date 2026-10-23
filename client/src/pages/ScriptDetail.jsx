@@ -6,7 +6,7 @@ import { PageHeader } from "../components/Layout.jsx";
 import { Card, PageSkeleton, ErrorState, Alert, Badge, StatusBadge, KeyValue, Spinner } from "../components/ui.jsx";
 import { useToast, useConfirm, Menu } from "../components/controls.jsx";
 import Icon from "../components/Icons.jsx";
-import ScriptView from "../components/ScriptView.jsx";
+import ScriptView, { layoutScreenplay } from "../components/ScriptView.jsx";
 import { fmtDate, secs, scriptStatus } from "../utils/format.js";
 
 export default function ScriptDetail() {
@@ -24,6 +24,8 @@ export default function ScriptDetail() {
   const fmt = s.generation_metadata?.format;
   const pb = s.generation_metadata?.playbook;
   const act = async (fn, msg) => { try { await fn(); toast(msg, "success"); reload({ silent: true }); } catch (e) { toast(e.message, "error"); } };
+  const doc = s.content ? layoutScreenplay(s.content) : null;
+  const meta = { title: s.title, genre: s.brief.genre, subgenre: s.brief.subgenre, date: s.created_at, credit: (() => { const n = (s.skill_identifier || "").replace(/^(manual|agent-sdk):/, ""); return n && n !== "skill" ? n.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") : "Scriptwriter Skill"; })() };
 
   return (
     <>
@@ -55,14 +57,43 @@ export default function ScriptDetail() {
           {s.status === "REJECTED" && <Alert kind="error" title="Rejected by the originality check">The script is kept below for reference, but it reuses source material. Rewrite it or import an edited version.</Alert>}
 
           {s.content && (
-            <Card bodyClass="p-5 sm:p-8">
-              <ScriptView text={s.content} />
-            </Card>
+            <section aria-label="Script document" className="surface-inset min-w-0 overflow-hidden !rounded-[20px]">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border px-4 py-2.5 text-xs font-bold text-muted sm:px-5">
+                <span className="flex items-center gap-1.5 text-fg"><Icon name="file" className="size-4" />Screenplay</span>
+                <span className="tabular">{doc.pageCount} page{doc.pageCount === 1 ? "" : "s"}</span>
+                <span className="tabular">≈ {doc.pageCount} min at a page a minute</span>
+                <span className="tabular">{doc.scenes.length} scene{doc.scenes.length === 1 ? "" : "s"}</span>
+                <span className="ml-auto hidden sm:inline">US letter · Courier 12</span>
+              </div>
+              <div className="bg-[linear-gradient(180deg,#d9d7d0,#cfcdc5)] px-2 py-4 sm:px-6 sm:py-8 dark:bg-[linear-gradient(180deg,#121212,#0c0c0c)]">
+                <ScriptView text={s.content} meta={meta} />
+              </div>
+            </section>
           )}
           {(s.status === "AWAITING_MANUAL" || s.status === "REJECTED" || s.content) && <ImportBox id={id} awaiting={s.status === "AWAITING_MANUAL"} onDone={() => reload({ silent: true })} />}
         </div>
 
         <div className="grid content-start gap-5">
+          {doc?.scenes.length > 0 && (
+            <Card title="Scenes" subtitle="Jump to references or a scene" bodyClass="p-2">
+              <div className="flex flex-wrap gap-1.5 px-1 pb-2 pt-1">
+                <a href="#ref-characters" onClick={(e) => { e.preventDefault(); document.getElementById("ref-characters")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} className="btn-secondary btn-sm min-w-0 flex-1"><Icon name="user" className="size-3.5" />Characters</a>
+                <a href="#ref-locations" onClick={(e) => { e.preventDefault(); document.getElementById("ref-locations")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} className="btn-secondary btn-sm min-w-0 flex-1"><Icon name="layers" className="size-3.5" />Locations</a>
+              </div>
+              <ol className="grid grid-cols-1 gap-0.5">
+                {doc.scenes.map(sc => (
+                  <li key={sc.number} className="min-w-0">
+                    <a href={`#scene-${sc.number}`} onClick={(e) => { e.preventDefault(); document.getElementById(`scene-${sc.number}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+                      className="flex min-h-10 items-center gap-3 rounded-lg px-3 py-1.5 text-sm transition-colors hover:bg-sunken">
+                      <span className="grid size-6 shrink-0 place-items-center rounded-md border border-[#c9a800] bg-[image:var(--mat-accent)] text-[11px] font-black text-black shadow-[var(--key-accent)]">{sc.number}</span>
+                      <span className="min-w-0 flex-1"><span className="block truncate font-bold uppercase text-[12px] tracking-wide">{sc.setting}</span>{sc.time && <span className="block truncate text-xs text-muted">{sc.time}</span>}</span>
+                      <span className="shrink-0 text-xs tabular text-muted">p. {sc.page}</span>
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </Card>
+          )}
           <Card title="Brief">
             <KeyValue items={[["Genre", s.brief.genre], ["Subgenre", s.brief.subgenre || "Any"], ["Length", secs(s.brief.target_duration_seconds)], ["Language", s.brief.language], s.brief.premise && ["Premise", s.brief.premise], s.brief.notes && ["Notes", s.brief.notes]]} />
           </Card>
@@ -70,6 +101,9 @@ export default function ScriptDetail() {
             <Card title="Originality check">
               <p className="flex items-center gap-2 font-bold"><Icon name={s.originality.passed ? "checkCircle" : "xCircle"} className={`size-4.5 ${s.originality.passed ? "text-success" : "text-error"}`} />{s.originality.passed ? "Passed" : "Failed"}</p>
               {s.originality.issues.length > 0 && <ul className="mt-2 list-disc pl-5 text-sm">{s.originality.issues.map((x, i) => <li key={i}>{x.message}</li>)}</ul>}
+              {s.generation_metadata?.renamed?.length > 0 && (
+                <p className="mt-2 text-sm">Renamed automatically (the name belonged to a source character): {s.generation_metadata.renamed.map(r => `${r.from} → ${r.to}`).join(", ")}.</p>
+              )}
               <p className="mt-2 text-xs text-muted">Checked against every training video's dialogue and character names. Longest shared run {s.originality.metrics.longest_shared_run} words · overlap {(s.originality.metrics.five_gram_overlap * 100).toFixed(1)}%.</p>
             </Card>
           )}

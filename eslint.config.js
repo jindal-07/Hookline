@@ -5,7 +5,7 @@ export default [
   { ignores: ["**/node_modules/**", "**/dist/**", "coverage/**", ".pg-test/**", "tests/.tmp/**", "server/storage/**"] },
   js.configs.recommended,
   {
-    files: ["server/**/*.js", "shared/**/*.js", "tests/**/*.js", "*.js"],
+    files: ["server/**/*.js", "shared/**/*.js", "tests/**/*.js", "scripts/**/*.{js,mjs}", "*.js"],
     languageOptions: { ecmaVersion: 2024, sourceType: "module", globals: { ...globals.node } },
     rules: {
       "no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrors: "none" }],

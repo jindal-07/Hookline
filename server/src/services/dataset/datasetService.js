@@ -35,7 +35,7 @@ async function loadTrainingItems(batches, excludeIds = new Set()) {
  */
 export async function buildDataset({ batchIds, name, excludeVideoIds } = {}) {
   const { Batch, Dataset } = M();
-  const where = { purpose: BATCH_PURPOSE.DATASET };
+  const where = { purpose: BATCH_PURPOSE.DATASET, status: { [Op.ne]: "CANCELLED" } };
   if (batchIds?.length) where.id = batchIds;
   const batches = await Batch.findAll({ where, order: [["created_at", "ASC"]] });
   if (!batches.length) throw badRequest("No training-dataset batches found. Upload a spreadsheet with purpose “Training dataset” first.");

@@ -169,6 +169,37 @@ describe("REST API", () => {
     expect(received).not.toContain('"video_id":"x"');
   });
 
+  it("deletes a batch with all its derived data, refuses running batches, and bulk-deletes only cancelled ones", async () => {
+    const { models } = env.ctx;
+    const done = await uploadAndRun();
+    const id = done.batch.id;
+    const videoIds = (await models.Video.findAll({ where: { batch_id: id } })).map(v => v.id);
+    expect(await models.Transcript.count({ where: { video_id: videoIds } })).toBeGreaterThan(0);
+    await models.ApiUsage.create({ id: "11111111-1111-4111-8111-111111111111", provider: "gemini", operation: "video_analysis", cost_usd: 0.05, cost_source: "priced", video_id: videoIds[0] });
+
+    // a running batch can't be deleted
+    const up2 = await request(app).post("/api/batches").attach("file", sheet(), "running.xlsx").expect(201);
+    await models.Batch.update({ status: "PROCESSING" }, { where: { id: up2.body.batch.id } });
+    await request(app).delete(`/api/batches/${up2.body.batch.id}`).expect(409);
+    await request(app).post(`/api/batches/${up2.body.batch.id}/cancel`).expect(200);
+
+    const r = await request(app).delete(`/api/batches/${id}`).expect(200);
+    expect(r.body).toMatchObject({ deleted: true, videos: videoIds.length });
+    await request(app).get(`/api/batches/${id}`).expect(404);
+    expect(await models.Video.count({ where: { id: videoIds } })).toBe(0);
+    for (const M of [models.Transcript, models.ScreenplayAnalysis, models.MatchResult, models.ProcessingLog]) expect(await M.count({ where: { video_id: videoIds } })).toBe(0);
+    expect(await models.ApiUsage.count({ where: { video_id: videoIds[0] } })).toBe(1); // spending history is kept
+
+    // bulk delete: only cancelled batches; the filter is mandatory
+    await request(app).delete("/api/batches").expect(400);
+    const keep = await request(app).post("/api/batches").attach("file", sheet(), "draft.xlsx").expect(201);
+    const bulk = await request(app).delete("/api/batches?status=CANCELLED").expect(200);
+    expect(bulk.body.deleted).toBe(1);
+    await request(app).get(`/api/batches/${up2.body.batch.id}`).expect(404);
+    await request(app).get(`/api/batches/${keep.body.batch.id}`).expect(200); // drafts untouched
+    await request(app).delete("/api/batches/00000000-0000-4000-8000-000000000000").expect(404);
+  });
+
   it("password wall: sign in with APP_PASSWORD, session cookie grants access, sign out ends it", async () => {
     process.env.APP_PASSWORD = "a-long-shared-passphrase";
     try {

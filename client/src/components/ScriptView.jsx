@@ -1,105 +1,113 @@
-// Screenplay reader: scene bars, full-width action, an indented dialogue column with the speaker's cue,
-// parentheticals in italics, right-aligned transitions, a cast list and a beat timeline.
-import { parseScript } from "@reelscript/shared/script";
+// Screenplay document: paper pages in industry format — title page, cast page, numbered script pages with
+// scene numbers in both margins, cue / parenthetical / dialogue columns, right-aligned transitions, beat sheet.
+import { layoutScreenplay } from "../utils/screenplayPages.js";
 
 /** Renders **bold** inline; everything else is plain text (never HTML). */
 function Inline({ text }) {
   return String(text).split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
-    part.startsWith("**") && part.endsWith("**") ? <strong key={i} className="font-bold text-fg">{part.slice(2, -2)}</strong> : part);
+    part.startsWith("**") && part.endsWith("**") ? <strong key={i}>{part.slice(2, -2)}</strong> : part);
 }
 
-function Block({ b }) {
+function BodyBlock({ b }) {
   switch (b.type) {
-    case "title":
-      return (
-        <header className="mb-2">
-          {b.episode && <p className="label mb-1">Episode {b.episode}</p>}
-          <h2 className="text-2xl sm:text-3xl">{b.text}</h2>
-        </header>
-      );
-    case "note":
-      return <p className="surface-inset my-3 px-4 py-2.5 text-sm text-muted"><Inline text={b.text} /></p>;
-    case "section":
-      return <h3 className="label mb-3 mt-8 flex items-center gap-3 after:h-px after:flex-1 after:bg-border">{b.text}</h3>;
-    case "subheading":
-      return <h4 className="mb-1 mt-4 text-sm">{b.text}</h4>;
     case "scene":
       return (
-        <div className="mb-4 mt-10 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border pb-3 first:mt-0">
-          {b.number != null && (
-            <span className="grid h-7 shrink-0 place-items-center rounded-lg border border-[#c9a800] bg-[image:var(--mat-accent)] px-2.5 text-xs font-black tabular text-black shadow-[var(--key-accent)]">
-              SCENE {b.number}
-            </span>
-          )}
-          {b.stamp && <span className="badge border-border bg-sunken text-muted tabular">{b.stamp}</span>}
-          <h3 className="min-w-0 flex-1 basis-48 text-[15px] font-black uppercase tracking-wide sm:text-base">{b.setting}</h3>
-          {b.time && <span className="badge shrink-0 border-border bg-sunken uppercase tracking-wider text-muted">{b.time}</span>}
-        </div>
+        <h3 className="sp-heading" id={b.number != null ? `scene-${b.number}` : undefined}>
+          {b.number != null && <span className="sp-scenenum left" aria-hidden="true">{b.number}</span>}
+          {b.stamp && <span>[{b.stamp}] </span>}{b.setting}{b.time && <> — {b.time}</>}
+          {b.number != null && <span className="sp-scenenum right" aria-hidden="true">{b.number}</span>}
+        </h3>
       );
-    case "action":
-      return <p className="my-3 text-[15px] leading-relaxed text-fg/85"><Inline text={b.text} /></p>;
     case "dialogue":
       return (
-        <div className="my-5 ml-3 mr-1 border-l-[3px] border-yellow/70 pl-4 sm:ml-[14%] sm:mr-[12%]">
-          <p className="text-[13px] font-black uppercase tracking-[0.14em] text-fg">
-            {b.name}{b.ext && <span className="ml-1.5 font-bold tracking-normal text-muted">({b.ext})</span>}
-          </p>
+        <div className="sp-dialogue">
+          <p className="sp-cue">{b.name}{b.ext && ` (${b.ext})`}</p>
           {b.parts.map((p, i) => p.kind === "paren"
-            ? <p key={i} className="mt-0.5 text-sm italic text-muted">{p.text}</p>
-            : <p key={i} className="mt-1 text-[15.5px] font-semibold leading-relaxed text-fg"><Inline text={p.text} /></p>)}
+            ? <p key={i} className="sp-paren">{p.text}</p>
+            : <p key={i} className="sp-line"><Inline text={p.text} /></p>)}
         </div>
       );
     case "transition":
-      return <p className="my-6 text-right text-xs font-black uppercase tracking-[0.2em] text-muted">{b.text}</p>;
-    case "bullet":
-      return <p className="my-1 pl-4 text-[15px] before:mr-2 before:content-['•']"><Inline text={b.text} /></p>;
-    case "numbered":
-      return <p className="my-1 pl-4 text-[15px]"><Inline text={b.text} /></p>;
+      return <p className="sp-transition">{b.text}</p>;
+    case "subheading":
+      return <p className="sp-action" style={{ fontWeight: 700, textTransform: "uppercase" }}>{b.text}</p>;
     default:
-      return null;
+      return <p className="sp-action"><Inline text={b.text || ""} /></p>;
   }
 }
 
-/** Groups consecutive cast entries and beats so they render as a list / timeline. */
-function group(blocks) {
-  const out = [];
-  for (const b of blocks) {
-    const last = out.at(-1);
-    if ((b.type === "cast" || b.type === "beat") && last?.type === `${b.type}-group`) last.items.push(b);
-    else if (b.type === "cast" || b.type === "beat") out.push({ type: `${b.type}-group`, items: [b] });
-    else out.push(b);
-  }
-  return out;
-}
+/**
+ * meta: { title?, genre?, subgenre?, date?, credit? } — shown on the title page (the script's own title wins).
+ */
+export default function ScriptView({ text, meta = {} }) {
+  const doc = layoutScreenplay(text);
+  const title = doc.title || meta.title || "Untitled";
+  const kind = [meta.genre, meta.subgenre].filter(Boolean).join(" · ");
+  const date = meta.date ? new Date(meta.date).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }) : null;
 
-export default function ScriptView({ text }) {
-  const blocks = group(parseScript(text));
   return (
-    <article className="mx-auto max-w-3xl break-words">
-      {blocks.map((b, i) => {
-        if (b.type === "cast-group") return (
-          <dl key={i} className="grid gap-2 sm:grid-cols-2">
-            {b.items.map((c, j) => (
-              <div key={j} className="surface-inset px-3.5 py-2.5">
-                <dt className="text-sm font-black">{c.name}</dt>
-                <dd className="text-[13px] leading-snug text-muted">{c.text}</dd>
-              </div>
-            ))}
-          </dl>
-        );
-        if (b.type === "beat-group") return (
-          <ol key={i} className="relative grid gap-3 border-l-2 border-border pl-6">
-            {b.items.map((x, j) => (
-              <li key={j} className="relative text-sm">
-                <span className="absolute -left-[37px] grid size-6 place-items-center rounded-full border border-[#c9a800] bg-[image:var(--mat-accent)] text-[11px] font-black text-black shadow-[var(--key-accent)]">{x.number}</span>
-                {x.scene && <span className="badge mr-2 border-border bg-sunken text-muted">{x.scene}</span>}
-                <span className="font-semibold"><Inline text={x.text} /></span>
-              </li>
-            ))}
-          </ol>
-        );
-        return <Block key={i} b={b} />;
-      })}
-    </article>
+    <div className="sp-desk">
+      <section className="sp-page sp-title-page" aria-label="Title page">
+        <div className="sp-title-block">
+          <p className="sp-title">{title}</p>
+          {doc.episode && <p style={{ marginTop: "1.25em" }}>Episode {doc.episode}</p>}
+          {kind && <p style={{ marginTop: "1em" }}>{kind}</p>}
+          <p style={{ marginTop: "3em" }}>Written by</p>
+          <p style={{ marginTop: "1em" }}>{meta.credit || "Scriptwriter skill"}</p>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "1em", alignItems: "flex-end" }}>
+          <p>{doc.note || "Standalone episode"}</p>
+          {date && <p style={{ textAlign: "right" }}>Draft — {date}</p>}
+        </div>
+      </section>
+
+      {doc.cast.map((page, i) => (
+        <section key={`cast-${i}`} id={i === 0 ? "ref-characters" : undefined} className="sp-page" aria-label="Character references">
+          <p className="sp-section-title">{i === 0 ? "Character references" : "Character references (cont'd)"}</p>
+          {page.map((e, j) => (
+            <div key={j} className="sp-ref">
+              <p className="sp-ref-name">{e.name || "—"}</p>
+              <p className="sp-ref-text"><Inline text={e.text || ""} /></p>
+              {e.scenes?.length > 0 && <p className="sp-ref-meta">{e.scenes.length === 1 ? "Scene" : "Scenes"} {e.scenes.join(", ")}{e.times?.length ? ` · ${e.times.join(", ")}` : ""}</p>}
+            </div>
+          ))}
+        </section>
+      ))}
+
+      {doc.locations.map((page, i) => (
+        <section key={`loc-${i}`} id={i === 0 ? "ref-locations" : undefined} className="sp-page" aria-label="Location references">
+          <p className="sp-section-title">{i === 0 ? "Location references" : "Location references (cont'd)"}</p>
+          {i === 0 && doc.locationsDerived && <p className="sp-ref-meta" style={{ marginTop: "-0.75em", marginBottom: "1.5em" }}>Taken from the scene headings and each location's first description.</p>}
+          {page.map((e, j) => (
+            <div key={j} className="sp-ref">
+              <p className="sp-ref-name">{e.name}</p>
+              {e.text && <p className="sp-ref-text"><Inline text={e.text} /></p>}
+              {e.scenes?.length > 0 && <p className="sp-ref-meta">{e.scenes.length === 1 ? "Scene" : "Scenes"} {e.scenes.join(", ")}{e.times?.length ? ` · ${e.times.join(", ")}` : ""}</p>}
+            </div>
+          ))}
+        </section>
+      ))}
+
+      {doc.body.map((page, i) => (
+        <section key={`p-${i}`} className="sp-page" aria-label={`Page ${i + 1} of ${doc.pageCount}`}>
+          {i > 0 && <span className="sp-pagenum">{i + 1}.</span>}
+          {page.map((b, j) => <BodyBlock key={j} b={b} />)}
+        </section>
+      ))}
+
+      {doc.beats.map((page, i) => (
+        <section key={`beats-${i}`} className="sp-page" aria-label="Beat sheet">
+          <p className="sp-section-title">{i === 0 ? "Beat sheet" : "Beat sheet (cont'd)"}</p>
+          {page.map((b, j) => (
+            <p key={j} className="sp-beat">
+              <span>{b.number ?? j + 1}.</span>
+              <span>{b.scene && <>({b.scene}) </>}<Inline text={b.text} /></span>
+            </p>
+          ))}
+        </section>
+      ))}
+    </div>
   );
 }
+
+export { layoutScreenplay };

@@ -373,7 +373,7 @@ function ScriptTab({ video, script, history, match, onImported }) {
             <span className="text-xs text-muted">{script.skill_identifier}{script.skill_version && ` v${script.skill_version}`} · {fmtDate(script.created_at)}</span>
             <button className="btn-secondary btn-sm ml-auto" onClick={() => navigator.clipboard.writeText(script.script_content).then(() => toast("Copied", "success"))}>Copy</button>
           </div>
-          <div className="surface-inset max-h-[640px] overflow-auto p-4 sm:p-6"><ScriptView text={script.script_content} /></div>
+          <div className="surface-inset max-h-[720px] overflow-auto bg-[linear-gradient(180deg,#d9d7d0,#cfcdc5)] p-2 sm:p-5 dark:bg-[linear-gradient(180deg,#121212,#0c0c0c)]"><ScriptView text={script.script_content} meta={{ title: video.title }} /></div>
         </div>
       ) : match?.eligible && !awaiting && <Empty icon="sparkles" title="No script yet" />}
 

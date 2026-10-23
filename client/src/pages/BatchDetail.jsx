@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, downloads, downloadFile } from "../services/api.js";
 import { useApi, useEvents, useDebounced } from "../hooks/index.js";
 import { PageHeader } from "../components/Layout.jsx";
@@ -9,6 +9,7 @@ import { VideoTable, Filters, EMPTY_FILTERS } from "../components/VideoTable.jsx
 import Icon from "../components/Icons.jsx";
 import AnalysisReview from "../components/AnalysisReview.jsx";
 import { BatchBadge } from "./Overview.jsx";
+import { useBatchDeletion, canDeleteBatch } from "../hooks/useBatchDeletion.js";
 import { fmtDate, fmtScore, fmtMs, fmtInt } from "../utils/format.js";
 
 const STAGE_GROUPS = [
@@ -29,6 +30,8 @@ export default function BatchDetail() {
   const [selected, setSelected] = useState(new Set());
   const confirm = useConfirm();
   const toast = useToast();
+  const navigate = useNavigate();
+  const { deleteOne } = useBatchDeletion();
   const batch = useApi(() => api.batch(id), [id]);
   const videos = useApi(() => api.batchVideos(id, { ...filters, batchId: undefined, limit: 1000 }), [id, JSON.stringify(filters)]);
   const refresh = useDebounced(() => { batch.reload({ silent: true }); videos.reload({ silent: true }); }, 600);
@@ -45,6 +48,7 @@ export default function BatchDetail() {
   const done = b.completed_videos + b.failed_videos + b.skipped_videos;
 
   const run = async (fn, ok) => { try { const r = await fn(); if (ok) toast(ok(r), "success"); refresh(); } catch (e) { toast(e.message, "error"); } };
+  const onDelete = async () => { if (await deleteOne(b)) navigate("/batches"); };
   const onCancel = async () => {
     if (!(await confirm({ title: "Cancel this batch?", body: "Queued videos are removed and running ones stop at their next stage. Completed results are kept. You can retry individual videos later.", confirmLabel: "Cancel batch", danger: true }))) return;
     run(() => api.cancelBatch(id), r => `${r.cancelled} videos cancelled`);
@@ -61,6 +65,7 @@ export default function BatchDetail() {
         actions={<>
           {b.status === "DRAFT" && <button className="btn-primary" onClick={() => run(() => api.processBatch(id), r => `${r.queued} videos queued`)}><Icon name="play" className="size-3.5 fill-current" />Start processing</button>}
           {["PROCESSING", "DRAFT"].includes(b.status) && <button className="btn-secondary" onClick={onCancel}><Icon name="stop" />Cancel</button>}
+          {canDeleteBatch(b) && <button className="btn-ghost !text-error" onClick={onDelete}><Icon name="trash" />Delete</button>}
           <Menu label="Export" icon="download" buttonClass="btn-secondary" items={[
             { heading: "Entire batch" },
             { label: "CSV", icon: "sheet", onClick: () => exportAs({ format: "csv" }) },

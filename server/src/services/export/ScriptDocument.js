@@ -1,25 +1,40 @@
-// Script downloads in industry screenplay layout (Courier 12, A4): title page, cast list, scene headings,
+// Script downloads in industry screenplay layout (Courier 12, A4): title page, character and location references, scene headings,
 // full-width action, cue / parenthetical / dialogue columns, right-aligned transitions and a key-beats page.
 // Word (.docx) via `docx`, PDF via `pdfkit`. Both are built from the same parsed blocks as the on-screen view.
 import { existsSync } from "node:fs";
 import PDFDocument from "pdfkit";
 import { AlignmentType, Document, Packer, PageBreak, Paragraph, TextRun } from "docx";
-import { parseScript } from "@reelscript/shared/script";
+import { parseScript, scriptReferences } from "@reelscript/shared/script";
 import { badRequest } from "../../utils/errors.js";
 
 const plain = (s) => String(s ?? "").replace(/\*\*(.+?)\*\*/g, "$1").replace(/\*\*/g, "");
 const sceneLine = (b) => `${b.number != null ? `${b.number}. ` : ""}${b.stamp ? `[${b.stamp}] ` : ""}${b.setting}${b.time ? ` — ${b.time}` : ""}`.toUpperCase();
 
-/** Title, subtitle and the body blocks (title/note blocks are moved to the title page). */
+/**
+ * Title page data, character and location references (with the scenes they appear in), the script body and the
+ * beat sheet — the same structure as the on-screen document.
+ */
 function prepare(script) {
   const blocks = parseScript(script.content);
   const titleBlock = blocks.find(b => b.type === "title");
   const title = script.title || titleBlock?.text || "Untitled episode";
   const brief = script.brief || {};
   const subtitle = [brief.genre, brief.subgenre].filter(Boolean).join(" · ");
-  const body = blocks.filter(b => b.type !== "title" && !(b.type === "note" && /continuity/i.test(b.text)));
-  return { title, subtitle, episode: titleBlock?.episode || null, body };
+  const refs = scriptReferences(blocks);
+  const body = [], beats = [];
+  let section = "body";
+  for (const b of blocks) {
+    if (b.type === "title" || (b.type === "note" && /continuity/i.test(b.text))) continue;
+    if (b.type === "section") { section = b.kind; if (b.kind === "body") body.push({ type: "subheading", text: b.text }); continue; }
+    if (b.type === "scene") section = "body";
+    if (section === "cast" || section === "locations") continue;
+    if (section === "beats") { if (b.type === "beat" || b.type === "numbered") beats.push(b); continue; }
+    body.push(b);
+  }
+  return { title, subtitle, episode: titleBlock?.episode || null, refs, body, beats };
 }
+
+const scenesNote = (e) => (e.scenes?.length ? `${e.scenes.length === 1 ? "Scene" : "Scenes"} ${e.scenes.join(", ")}${e.times?.length ? ` · ${e.times.join(", ")}` : ""}` : null);
 
 export function scriptFileName(script, ext) {
   const base = (script.title || `script-${String(script.id).slice(0, 8)}`).replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-").slice(0, 80) || "script";
@@ -33,7 +48,7 @@ const run = (text, o = {}) => new TextRun({ text, font: FONT, size: 24, ...o });
 const para = (children, o = {}) => new Paragraph({ children: [].concat(children), spacing: { after: 240 }, ...o });
 
 export async function scriptToDocx(script) {
-  const { title, subtitle, episode, body } = prepare(script);
+  const { title, subtitle, episode, refs, body, beats } = prepare(script);
   const out = [
     para(run(""), { spacing: { before: 3 * TW } }),
     para(run(title.toUpperCase(), { bold: true }), { alignment: AlignmentType.CENTER }),
@@ -42,20 +57,22 @@ export async function scriptToDocx(script) {
     para(run("Standalone episode"), { alignment: AlignmentType.CENTER }),
     para(new PageBreak()),
   ];
-  let section = null;
+  const refPage = (heading, entries, intro) => {
+    if (!entries.length) return;
+    out.push(para(run(heading, { bold: true, underline: {} }), { keepNext: true }));
+    if (intro) out.push(para(run(intro, { italics: true })));
+    for (const e of entries) {
+      out.push(para(run(e.name.toUpperCase(), { bold: true }), { keepNext: true, spacing: { after: 60 } }));
+      if (e.text) out.push(para(run(plain(e.text)), { keepNext: !!scenesNote(e), spacing: { after: scenesNote(e) ? 60 : 240 } }));
+      if (scenesNote(e)) out.push(para(run(scenesNote(e), { italics: true })));
+    }
+    out.push(para(new PageBreak()));
+  };
+  refPage("CHARACTER REFERENCES", refs.cast);
+  refPage("LOCATION REFERENCES", refs.locations, refs.locationsDerived ? "Taken from the scene headings and each location's first description." : null);
   for (const b of body) {
     switch (b.type) {
-      case "section":
-        section = b.kind;
-        if (b.kind === "beats") out.push(para(new PageBreak()));
-        out.push(para(run(b.text.toUpperCase(), { bold: true, underline: {} }), { keepNext: true }));
-        break;
-      case "cast":
-        out.push(para([run(`${b.name.toUpperCase()} — `, { bold: true }), run(plain(b.text))], { spacing: { after: 120 } }));
-        break;
       case "scene":
-        if (section === "cast") out.push(para(run(""), { spacing: { after: 240 } }));
-        section = "body";
         out.push(para(run(sceneLine(b), { bold: true }), { keepNext: true, spacing: { before: 240, after: 240 } }));
         break;
       case "action": case "bullet": case "numbered": case "note": case "subheading":
@@ -73,11 +90,12 @@ export async function scriptToDocx(script) {
       case "transition":
         out.push(para(run(b.text.toUpperCase()), { alignment: AlignmentType.RIGHT }));
         break;
-      case "beat":
-        out.push(para([run(`${b.number}. `, { bold: true }), run(`${b.scene ? `(${b.scene}) ` : ""}${plain(b.text)}`)], { spacing: { after: 120 } }));
-        break;
       default:
     }
+  }
+  if (beats.length) {
+    out.push(para(new PageBreak()), para(run("BEAT SHEET", { bold: true, underline: {} }), { keepNext: true }));
+    for (const b of beats) out.push(para([run(`${b.number ?? ""}. `, { bold: true }), run(`${b.scene ? `(${b.scene}) ` : ""}${plain(b.text)}`)], { spacing: { after: 120 } }));
   }
   const doc = new Document({
     creator: "Hookline",
@@ -103,7 +121,7 @@ const UNICODE_FONT_CANDIDATES = [
 export const unicodePdfFont = () => UNICODE_FONT_CANDIDATES.find(f => existsSync(f.path) && (/\.(ttf|otf)$/i.test(f.path) || f.family)) || null;
 
 export async function scriptToPdf(script) {
-  const { title, subtitle, episode, body } = prepare(script);
+  const { title, subtitle, episode, refs, body, beats } = prepare(script);
   let fonts = { regular: "Courier", bold: "Courier-Bold", italic: "Courier-Oblique" };
   const unicode = needsUnicodeFont(script.content + title) ? unicodePdfFont() : null;
   if (needsUnicodeFont(script.content + title) && !unicode)
@@ -136,24 +154,29 @@ export async function scriptToPdf(script) {
     text("Standalone episode", { align: "center" });
     doc.addPage();
 
-    let section = null;
+    const refPage = (heading, entries, intro) => {
+      if (!entries.length) return;
+      text(heading, { font: fonts.bold });
+      gap();
+      if (intro) { text(intro, { font: fonts.italic }); gap(); }
+      for (const e of entries) {
+        if (!fits(LINE * 3)) doc.addPage();
+        text(e.name.toUpperCase(), { font: fonts.bold });
+        if (e.text) text(plain(e.text));
+        if (scenesNote(e)) text(scenesNote(e), { font: fonts.italic });
+        gap();
+      }
+      doc.addPage();
+    };
+    refPage("CHARACTER REFERENCES", refs.cast);
+    refPage("LOCATION REFERENCES", refs.locations, refs.locationsDerived ? "Taken from the scene headings and each location's first description." : null);
+
+    let firstOnPage = true;
     for (const b of body) {
       switch (b.type) {
-        case "section":
-          section = b.kind;
-          if (b.kind === "beats") doc.addPage();
-          text(b.text.toUpperCase(), { font: fonts.bold });
-          gap();
-          break;
-        case "cast":
-          text(`${b.name.toUpperCase()} — ${plain(b.text)}`);
-          doc.moveDown(0.5);
-          break;
         case "scene":
-          if (section === "cast") gap();
-          section = "body";
           if (!fits(LINE * 4)) doc.addPage(); // keep a heading with the start of its scene
-          gap();
+          if (!firstOnPage) gap();
           text(sceneLine(b), { font: fonts.bold });
           gap();
           break;
@@ -174,12 +197,15 @@ export async function scriptToPdf(script) {
           text(b.text.toUpperCase(), { align: "right" });
           gap();
           break;
-        case "beat":
-          text(`${b.number}. ${b.scene ? `(${b.scene}) ` : ""}${plain(b.text)}`);
-          doc.moveDown(0.5);
-          break;
         default:
       }
+      firstOnPage = false;
+    }
+    if (beats.length) {
+      doc.addPage();
+      text("BEAT SHEET", { font: fonts.bold });
+      gap();
+      for (const b of beats) { text(`${b.number ?? ""}. ${b.scene ? `(${b.scene}) ` : ""}${plain(b.text)}`); doc.moveDown(0.5); }
     }
 
     // Page numbers (top right), skipping the title page

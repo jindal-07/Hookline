@@ -50,7 +50,7 @@ export function parseScript(text) {
     if ((m = line.match(/^##\s+(.+)$/))) {
       flush();
       const title = m[1].trim();
-      mode = /main characters|cast|characters/i.test(title) ? "cast" : /beat/i.test(title) ? "beats" : "body";
+      mode = /\blocations?\b|\bsettings?\b|\bsets\b/i.test(title) ? "locations" : /main characters|cast|characters/i.test(title) ? "cast" : /beat/i.test(title) ? "beats" : "body";
       blocks.push({ type: "section", text: title, kind: mode });
       continue;
     }
@@ -62,6 +62,7 @@ export function parseScript(text) {
       const item = m[1];
       const cm = item.match(/^\*\*(.+?)\*\*\s*[:—–-]\s*(.+)$/);
       if (mode === "cast" && cm) blocks.push({ type: "cast", name: cm[1], text: cm[2] });
+      else if (mode === "locations" && cm) blocks.push({ type: "location", name: cm[1], text: cm[2] });
       else blocks.push({ type: "bullet", text: item });
       continue;
     }
@@ -97,4 +98,49 @@ export function parseScript(text) {
   }
   flush();
   return blocks;
+}
+
+const HONORIFIC = /^(mr|mrs|ms|miss|dr|judge|sgt|sergeant|officer|captain|capt|inspector|detective|det|agent|prof|professor|sir|lady|lord|aunt|uncle|grandma|grandpa)\.?$/i;
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** "INT. County Spelling Bee — Stage" → "COUNTY SPELLING BEE STAGE" (for matching locations to scene headings). */
+const placeKey = (s) => String(s || "").toUpperCase()
+  .replace(/^(INT\.?\s*\/\s*EXT\.?|EXT\.?\s*\/\s*INT\.?|I\/E|INT\.|EXT\.)\s*/, "")
+  .replace(/[^\p{L}\p{N} ]+/gu, " ").replace(/\s+/g, " ").trim();
+
+/**
+ * Character and location references for a parsed script, each with the scenes it appears in.
+ * Locations come from a "Locations" section; scripts written without one get them from their scene headings,
+ * described by the first action paragraph of the first scene at that place (marked derived).
+ */
+export function scriptReferences(blocks) {
+  const scenes = [];
+  let cur = null;
+  for (const b of blocks) {
+    if (b.type === "scene") { cur = { number: b.number ?? scenes.length + 1, setting: b.setting, time: b.time, text: [], firstAction: null }; scenes.push(cur); continue; }
+    if (b.type === "section" && b.kind !== "body") { cur = null; continue; }
+    if (!cur) continue;
+    if (b.type === "action" && !cur.firstAction) cur.firstAction = b.text;
+    cur.text.push(b.type === "dialogue" ? [b.name, ...b.parts.map(p => p.text)].join(" ") : b.text || "");
+  }
+
+  let locations = blocks.filter(b => b.type === "location").map(l => ({ name: l.name, text: l.text, derived: false }));
+  if (!locations.length) {
+    const seen = new Map();
+    for (const s of scenes) if (!seen.has(placeKey(s.setting))) seen.set(placeKey(s.setting), { name: s.setting, text: s.firstAction || "", derived: true });
+    locations = [...seen.values()];
+  }
+  locations = locations.map(l => {
+    const k = placeKey(l.name);
+    const used = scenes.filter(s => { const sk = placeKey(s.setting); return sk === k || (k.length >= 4 && sk.includes(k)); });
+    return { ...l, scenes: used.map(s => s.number), times: [...new Set(used.map(s => s.time).filter(Boolean))] };
+  });
+
+  const cast = blocks.filter(b => b.type === "cast").map(c => {
+    const words = c.name.split(/\s+/).map(w => w.replace(/[^\p{L}\p{N}'’-]/gu, "")).filter(w => w && !HONORIFIC.test(w));
+    const keys = [...new Set([words[0], words.at(-1)].filter(w => w && w.length > 2))];
+    const used = scenes.filter(s => keys.some(k => new RegExp(`(^|[^\\p{L}])${escapeRe(k)}([^\\p{L}]|$)`, "iu").test(s.text.join(" "))));
+    return { name: c.name, text: c.text, scenes: used.map(s => s.number) };
+  });
+
+  return { cast, locations, locationsDerived: locations.some(l => l.derived) };
 }

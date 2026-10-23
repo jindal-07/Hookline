@@ -34,24 +34,34 @@ export function nameWords(label) {
     });
 }
 
-/**
- * Does the script use this name word as a name (capitalised or in capitals), not as an ordinary word?
- * For words of multi-word names ("Hope Long"), a capitalised word that merely starts a sentence ("Long before…")
- * doesn't count; all-caps and mid-sentence uses do.
- */
 const escapeRe = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const SENTENCE_START = /(?:^|[.!?…:]\s+|\n\s*|["“(]\s*)$/;
+const SENTENCE_START = /(?:^|[.!?…:]\s+|\n\s*|["“(]\s*|\*\*\s*)$/;
+const AFTER_ARTICLE = /(?:^|[^A-Za-z])(?:the|a|an)\s+$/i;
 
-function usesName(text, tokenSet, word, { multiWord = false } = {}) {
-  if (!LATIN.test(word)) return tokenSet.has(word.toLowerCase());
+/**
+ * Where the script uses this name word as a name (capitalised or in capitals), not as an ordinary word.
+ * For words of multi-word names ("Hope Long"), a capitalised word that merely starts a sentence ("Long before…")
+ * or follows an article ("The Long Night") doesn't count; all-caps and other mid-sentence uses do.
+ * Shared with the name repair, so the check and the fix agree on what is a name.
+ * @returns {{ index: number, text: string }[]}
+ */
+export function nameMatches(text, word, { multiWord = false } = {}) {
+  if (!LATIN.test(word)) return [];
   const cap = word[0].toUpperCase() + word.slice(1).toLowerCase();
   const upper = word.toUpperCase();
   const re = new RegExp(`(?<![A-Za-z])(?:${escapeRe(cap)}|${escapeRe(upper)})(?![A-Za-z])`, "g");
+  const out = [];
   for (const m of text.matchAll(re)) {
-    if (!multiWord || m[0] === upper) return true;
-    if (!SENTENCE_START.test(text.slice(Math.max(0, m.index - 6), m.index))) return true;
+    const before = text.slice(Math.max(0, m.index - 6), m.index);
+    if (multiWord && m[0] !== upper && (SENTENCE_START.test(before) || AFTER_ARTICLE.test(before))) continue;
+    out.push({ index: m.index, text: m[0] });
   }
-  return false;
+  return out;
+}
+
+function usesName(text, tokenSet, word, { multiWord = false } = {}) {
+  if (!LATIN.test(word)) return tokenSet.has(word.toLowerCase());
+  return nameMatches(text, word, { multiWord }).length > 0;
 }
 
 export const ORIGINALITY_DEFAULTS = {

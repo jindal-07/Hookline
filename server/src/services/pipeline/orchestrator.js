@@ -393,9 +393,13 @@ const scriptHandler = async (job) => {
   const { Script } = M();
   const script = await Script.findByPk(job.data.scriptId);
   if (!script || [SCRIPT_STATUS.COMPLETED, SCRIPT_STATUS.REJECTED].includes(script.status)) return { skipped: true };
+  // Claim it: only one worker (even across processes) moves a script from QUEUED to RUNNING and runs the agent.
+  const [claimed] = await Script.update({ status: SCRIPT_STATUS.RUNNING, error_message: null }, { where: { id: script.id, status: SCRIPT_STATUS.QUEUED } });
+  if (!claimed) return { skipped: "already running or finished elsewhere" };
+  await script.reload();
+  publish(scriptEvent(script));
   const dataset = script.dataset_id ? await getDataset(script.dataset_id) : await latestDataset();
   if (!dataset) throw permanent("NO_DATASET", "The dataset used for this script no longer exists");
-  await setScript(script, { status: SCRIPT_STATUS.RUNNING, error_message: null });
   const { variant, ...brief } = script.brief;
   const playbook = playbookFor(dataset.profile, { genre: brief.genre, subgenre: brief.subgenre });
   if (variant) brief.variant_note = `This is variant ${variant}; make its premise clearly different from other variants.`;
@@ -428,8 +432,8 @@ export async function importStandalone(scriptId, content) {
   if (!s) throw notFound("Script");
   const dataset = s.dataset_id ? await getDataset(s.dataset_id) : await latestDataset();
   const svc = new ScriptGenerationService({ adapter: providers.skillAdapter(), embeddings: providers.embeddings() });
-  const out = await svc.finalizeStandalone(content, { corpus: dataset ? await datasetCorpus(dataset) : {}, metadata: { adapter: "manual-import" } });
-  return setScript(s, { status: out.status, content, title: out.title || s.title, generation_metadata: { ...s.generation_metadata, ...out.metadata }, originality: out.originality, error_message: null });
+  const out = await svc.finalizeStandalone(content, { corpus: dataset ? await datasetCorpus(dataset) : {}, metadata: { adapter: "manual-import" }, language: s.brief?.language });
+  return setScript(s, { status: out.status, content: out.content, title: out.title || s.title, generation_metadata: { ...s.generation_metadata, ...out.metadata }, originality: out.originality, error_message: null });
 }
 
 export const handlers = { [STAGES.DOWNLOAD]: download, [STAGES.AUDIO]: audio, [STAGES.TRANSCRIBE]: transcribe, [STAGES.ANALYZE]: analyze, [STAGES.MATCH]: match, [STAGES.GENERATE]: generate, [STAGES.SCRIPT]: scriptHandler };
@@ -478,6 +482,37 @@ export async function startBatch(batchId) {
   }
   await refreshBatch(batchId);
   return { queued, total: pending.length };
+}
+
+/** Statuses in which a batch may be deleted (a running batch must be cancelled first). */
+const DELETABLE = [BATCH_STATUS.DRAFT, BATCH_STATUS.COMPLETED, BATCH_STATUS.CANCELLED];
+
+/**
+ * Delete a batch and everything derived from its videos (transcripts, analyses, matches, Story DNA, per-video
+ * scripts, logs) via the foreign-key cascade, plus their media files and any queued jobs.
+ * Kept on purpose: dataset snapshots (their numbers were computed already) and the API usage ledger (money spent).
+ */
+export async function deleteBatch(batchId) {
+  const { Batch, Video } = M();
+  const batch = await Batch.findByPk(batchId);
+  if (!batch) throw notFound("Batch");
+  if (!DELETABLE.includes(batch.status)) throw conflict(`This batch is ${batch.status.toLowerCase()} — cancel it before deleting it`);
+  const videos = await Video.findAll({ where: { batch_id: batchId }, attributes: ["id", "video_path", "audio_path"] });
+  for (const v of videos) {
+    await queues().removeForVideo(v.id).catch(() => 0);
+    if (v.video_path || v.audio_path) await deleteMedia(v).catch(() => {});
+  }
+  await batch.destroy(); // ON DELETE CASCADE removes videos and all per-video rows
+  publish({ type: "batch", batch_id: batchId, deleted: true });
+  return { deleted: true, batch_id: batchId, filename: batch.filename, videos: videos.length };
+}
+
+/** Delete every cancelled batch. */
+export async function deleteCancelledBatches() {
+  const batches = await M().Batch.findAll({ where: { status: BATCH_STATUS.CANCELLED }, attributes: ["id"] });
+  const results = [];
+  for (const b of batches) results.push(await deleteBatch(b.id));
+  return { deleted: results.length, videos: results.reduce((t, r) => t + r.videos, 0), batches: results };
 }
 
 export async function cancelBatch(batchId) {
@@ -569,9 +604,9 @@ export async function importScript(videoId, content, { skillIdentifier, skillVer
   const svc = new ScriptGenerationService({ adapter: providers.skillAdapter(), embeddings: providers.embeddings() });
   const out = await svc.finalize(content, { metadata: { adapter: "manual-import" }, transcript: t?.normalized_transcript, screenplayAnalysis: a?.normalized_analysis, storyDNA });
   const row = await GeneratedScript.create({
-    video_id: videoId, script_content: content, generation_status: out.status,
+    video_id: videoId, script_content: out.content, generation_status: out.status,
     skill_identifier: skillIdentifier || providers.skillAdapter().identifier, skill_version: skillVersion || null,
-    generation_metadata: { adapter: "manual-import", originality: out.originality },
+    generation_metadata: { ...out.metadata, originality: out.originality },
   });
   await setVideo(video, { status: VIDEO_STATUS.COMPLETED, current_stage: null, generation_status: out.status }, { force: true });
   await logStage(video, STAGES.GENERATE, "IMPORTED", { metadata: { generation_status: out.status } });
@@ -592,7 +627,16 @@ export async function recoverInFlight() {
     }
     await refreshBatch(b.id);
   }
-  if (requeued) logger.info({ requeued }, "recovered in-flight videos");
+  // Standalone scripts: a restart kills an in-memory job (and the agent it started), leaving the script
+  // QUEUED/RUNNING with nothing behind it. Requeue them; the job id dedupe skips any still in a durable queue.
+  const { Script } = M();
+  const stuck = await Script.findAll({ where: { status: [SCRIPT_STATUS.QUEUED, SCRIPT_STATUS.RUNNING] } });
+  for (const s of stuck) {
+    await setScript(s, { status: SCRIPT_STATUS.QUEUED, error_message: null });
+    const r = await queues().add(STAGES.SCRIPT, { scriptId: s.id }, { jobId: jobIdFor(STAGES.SCRIPT, s.id) });
+    if (!r?.duplicate) requeued++;
+  }
+  if (requeued) logger.info({ requeued, scripts: stuck.length }, "recovered in-flight videos and scripts");
   return requeued;
 }
 

@@ -3,6 +3,8 @@ import { api } from "../services/api.js";
 import { useApi, useEvents, useDebounced } from "../hooks/index.js";
 import { PageHeader } from "../components/Layout.jsx";
 import { Card, PageSkeleton, ErrorState, Empty, ProgressBar, TableScroll } from "../components/ui.jsx";
+import { IconButton, Tooltip } from "../components/controls.jsx";
+import { useBatchDeletion, canDeleteBatch } from "../hooks/useBatchDeletion.js";
 import Icon from "../components/Icons.jsx";
 import { BatchBadge } from "./Overview.jsx";
 import { fmtDate } from "../utils/format.js";
@@ -11,11 +13,20 @@ export default function Batches() {
   const { data, error, reload } = useApi(() => api.batches());
   const refresh = useDebounced(() => reload({ silent: true }), 800);
   useEvents((e) => e.type === "batch" && refresh());
+  const { deleteOne, deleteCancelled } = useBatchDeletion();
   if (error) return <ErrorState error={error} onRetry={reload} />;
   if (!data) return <PageSkeleton />;
+  const cancelled = data.items.filter(b => b.status === "CANCELLED");
+  const remove = async (b) => { if (await deleteOne(b)) reload({ silent: true }); };
+  const DeleteButton = ({ b }) => canDeleteBatch(b)
+    ? <IconButton icon="trash" size="sm" label={`Delete ${b.filename}`} className="hover:!text-error" onClick={() => remove(b)} />
+    : <Tooltip label="Cancel this batch before deleting it"><span><button type="button" className="btn-ghost btn-sm btn-icon" disabled aria-label="Delete (cancel the batch first)"><Icon name="trash" className="size-4" /></button></span></Tooltip>;
   return (
     <>
-      <PageHeader title="Batches" subtitle="Each uploaded spreadsheet becomes a batch." actions={<Link to="/upload" className="btn-primary"><Icon name="upload" />New batch</Link>} />
+      <PageHeader title="Batches" subtitle="Each uploaded spreadsheet becomes a batch." actions={<>
+        {cancelled.length > 0 && <button className="btn-secondary !text-error" onClick={async () => { if (await deleteCancelled(cancelled)) reload({ silent: true }); }}><Icon name="trash" />Delete cancelled ({cancelled.length})</button>}
+        <Link to="/upload" className="btn-primary"><Icon name="upload" />New batch</Link>
+      </>} />
       <Card bodyClass="p-0">
         {!data.items.length ? <Empty icon="sheet" title="No batches yet" action={<Link to="/upload" className="btn-primary btn-sm">Upload a spreadsheet</Link>} /> : (
           <>
@@ -24,8 +35,8 @@ export default function Batches() {
               {data.items.map(b => {
                 const done = b.completed_videos + b.failed_videos + b.skipped_videos;
                 return (
-                  <li key={b.id}>
-                    <Link to={`/batches/${b.id}`} className="block px-4 py-4 transition-colors hover:bg-sunken">
+                  <li key={b.id} className="flex items-start">
+                    <Link to={`/batches/${b.id}`} className="block min-w-0 flex-1 py-4 pl-4 pr-2 transition-colors hover:bg-sunken">
                       <div className="flex items-start gap-2">
                         <div className="min-w-0 flex-1">
                           <p className="break-words font-bold">{b.filename}</p>
@@ -41,6 +52,7 @@ export default function Batches() {
                         <span className={b.failed_videos ? "text-error" : "text-muted"}>{b.failed_videos} failed</span>
                       </div>
                     </Link>
+                    <div className="shrink-0 py-3 pr-3"><DeleteButton b={b} /></div>
                   </li>
                 );
               })}
@@ -48,7 +60,7 @@ export default function Batches() {
             {/* tablet / desktop: table */}
             <TableScroll label="Batches" className="hidden md:block">
               <table className="table min-w-[720px]">
-                <thead><tr><th>File</th><th>Status</th><th className="w-56">Progress</th><th className="text-right">Completed</th><th className="text-right">Skipped</th><th className="text-right">Failed</th><th>Created</th></tr></thead>
+                <thead><tr><th>File</th><th>Status</th><th className="w-56">Progress</th><th className="text-right">Completed</th><th className="text-right">Skipped</th><th className="text-right">Failed</th><th>Created</th><th className="w-12"><span className="sr-only">Actions</span></th></tr></thead>
                 <tbody>
                   {data.items.map(b => {
                     const done = b.completed_videos + b.failed_videos + b.skipped_videos;
@@ -61,6 +73,7 @@ export default function Batches() {
                         <td className="text-right tabular text-muted">{b.skipped_videos}</td>
                         <td className={`text-right tabular ${b.failed_videos ? "text-error" : "text-muted"}`}>{b.failed_videos}</td>
                         <td className="whitespace-nowrap text-muted">{fmtDate(b.created_at)}</td>
+                        <td><DeleteButton b={b} /></td>
                       </tr>
                     );
                   })}

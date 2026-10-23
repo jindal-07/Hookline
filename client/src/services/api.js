@@ -45,6 +45,8 @@ export const api = {
   batch: (id) => request(`/batches/${id}`),
   processBatch: (id) => request(`/batches/${id}/process`, { method: "POST" }),
   cancelBatch: (id) => request(`/batches/${id}/cancel`, { method: "POST" }),
+  deleteBatch: (id) => request(`/batches/${id}`, { method: "DELETE" }),
+  deleteCancelledBatches: () => request("/batches?status=CANCELLED", { method: "DELETE" }),
   batchVideos: (id, filters) => request(`/batches/${id}/videos${qs(filters)}`),
   batchAnalysis: (id) => request(`/batches/${id}/analysis`),
 

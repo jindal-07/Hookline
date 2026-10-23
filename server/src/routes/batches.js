@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "../models/index.js";
 import { config } from "../config/env.js";
 import { parseSpreadsheet, validationReportCsv } from "../services/excel/ExcelParser.js";
-import { startBatch, cancelBatch } from "../services/pipeline/orchestrator.js";
+import { startBatch, cancelBatch, deleteBatch, deleteCancelledBatches } from "../services/pipeline/orchestrator.js";
 import { listVideos, dashboardStats, usageForBatch } from "../services/queries.js";
 import { asyncRoute, validateReq, uuidParam, upload, uploadLimiter } from "../middleware/index.js";
 import { badRequest, notFound } from "../utils/errors.js";
@@ -49,6 +49,12 @@ r.post("/", uploadLimiter, upload.single("file"), asyncRoute(async (req, res) =>
     rows_truncated: parsed.rows.length > 1000,
   });
 }));
+
+/** Delete all cancelled batches (the only bulk delete allowed). */
+r.delete("/", validateReq("query", z.object({ status: z.literal("CANCELLED") })), asyncRoute(async (_req, res) => res.json(await deleteCancelledBatches())));
+
+/** Delete one batch (draft, completed or cancelled) with its videos and derived data. */
+r.delete("/:id", validateReq("params", uuidParam), asyncRoute(async (req, res) => res.json(await deleteBatch(req.params.id))));
 
 r.get("/", asyncRoute(async (_req, res) => {
   const batches = await M().Batch.findAll({ order: [["created_at", "DESC"]], limit: 200, attributes: { exclude: ["validation_report"] } });

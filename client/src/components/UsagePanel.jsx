@@ -37,7 +37,7 @@ export default function UsagePanel() {
     >
       {error ? <ErrorState error={error} onRetry={reload} /> : !data ? <Loading /> : (
         <div className="grid grid-cols-1 gap-5">
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
             {Object.keys(META).map(p => <ProviderCard key={p} id={p} u={data.providers[p]} onEditCredits={() => setEditing(p)} />)}
           </div>
           <DailyChart daily={data.daily} />
@@ -66,9 +66,9 @@ function ProviderCard({ id, u, onEditCredits }) {
       : [["Requests", int(u.requests)], ["Input tokens", tokens(u.input_tokens)], ["Output tokens", tokens(u.output_tokens)], ["Retried attempts", int(u.failed_requests)]];
   return (
     <InsetPanel className="grid content-start gap-3">
-      <div className="flex items-start gap-3">
+      <div className="flex flex-wrap items-start gap-3">
         <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-border bg-[image:var(--mat-key)] text-muted shadow-[var(--key)]"><Icon name={m.icon} className="size-4.5" /></span>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-32">
           <p className="font-black">{m.name}</p>
           <p className="truncate text-xs text-muted">{m.what}</p>
         </div>
@@ -84,14 +84,14 @@ function ProviderCard({ id, u, onEditCredits }) {
       <div className="border-t border-border pt-3">
         {c ? (
           <>
-            <div className="flex items-baseline justify-between gap-2 text-sm">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5 text-sm">
               <span className="font-bold tabular">{usd(c.remaining_usd)} left</span>
               <span className="text-xs tabular text-muted">{usd(c.used_usd)} of {usd(c.amount_usd)} used</span>
             </div>
             <div className="mt-1.5 h-2.5 overflow-hidden rounded-full border border-border bg-[image:var(--mat-well)] p-px shadow-[var(--well)]" role="meter" aria-label={`${m.name} credits used`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}>
               <div className={`h-full rounded-full ${pct > 85 ? "bg-error-solid" : pct > 60 ? "bg-warning-solid" : m.color}`} style={{ width: `${pct}%` }} />
             </div>
-            <div className="mt-1.5 flex items-center justify-between gap-2">
+            <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs text-muted">since {c.since}</span>
               <button type="button" className="btn-ghost btn-sm" onClick={onEditCredits}>Edit credits</button>
             </div>
