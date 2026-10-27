@@ -75,6 +75,18 @@ describe("training dataset + standalone scripts", () => {
     if (gen.status === 201) await request(app).get(`/api/batches/${gen.body.batch.id}/analysis`).expect(400);
   });
 
+  it("counts a video in several sheets once: an analysed copy is used, and best wins a best/bad conflict", async () => {
+    await runTrainingBatch(); // U(0)–U(5) best, U(6)–U(11) bad, all analysed
+    // a newer sheet, not processed yet, repeats U(0) and relabels U(6) as best
+    const second = makeWorkbook([["video_url", "performance"], [U(0), "best"], [U(6), "best"]]);
+    await request(app).post("/api/batches").field("purpose", "dataset").attach("file", second, "again.xlsx").expect(201);
+    const ds = (await request(app).post("/api/datasets").send({}).expect(201)).body;
+    expect(ds).toMatchObject({ video_count: 12, best_count: 7, bad_count: 5 });
+    expect(ds.excluded).toEqual([]); // the unanalysed repeats don't push out the analysed copies
+    expect(ds.profile.merged).toMatchObject({ duplicate_rows: 2, videos_in_several_sheets: 2, label_conflicts: [{ url: U(6), counted_as: "best" }] });
+    expect(ds.profile.notes.join(" ")).toMatch(/labelled best in one sheet and bad in another; they count as best/);
+  });
+
   it("imports transcript + screenplay text from a CSV: analysed from text, never downloaded, then built into the dataset", async () => {
     const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
     const screenplay = (i) => `**[00:00 - 00:40] EXT. STREET - DAY**\n\nRAVI\nWhere were you last night‚Äôs ${i}?\n\nMEERA\nAt the office ‚Äî again.\n\n**[00:40 - 01:${i < 6 ? "30" : "50"}] INT. HOME - NIGHT**\n\nRAVI\nThen who is this?`;

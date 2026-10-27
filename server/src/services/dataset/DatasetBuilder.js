@@ -130,7 +130,10 @@ export function patternLift(rows) {
  * @param {Array<{video, analysis, transcript, storyDna, match}>} items  labelled, analysed dataset videos
  * @param {Array<{video_id, reason}>} excluded
  */
-export function buildDatasetProfile(items, excluded = []) {
+/**
+ * @param {object} [merged]  duplicate handling from loading: { duplicate_rows, videos_in_several_sheets, label_conflicts }
+ */
+export function buildDatasetProfile(items, excluded = [], merged = null) {
   const rows = items.map(extractFeatures).filter(r => r.label === "best" || r.label === "bad");
   const best = rows.filter(r => r.label === "best"), bad = rows.filter(r => r.label === "bad");
   const bestShare = rows.length ? best.length / rows.length : 0;
@@ -195,6 +198,8 @@ export function buildDatasetProfile(items, excluded = []) {
   if (!best.length || !bad.length) notes.push("Both best and bad videos are needed to learn what separates them.");
   const lowGenres = genres.filter(g => g.low_sample).map(g => g.genre);
   if (lowGenres.length) notes.push(`Too few videos to judge: ${lowGenres.join(", ")}.`);
+  if (merged?.duplicate_rows) notes.push(`${merged.videos_in_several_sheets} video(s) appear in more than one sheet; each counts once (${merged.duplicate_rows} repeated row(s) merged).`);
+  if (merged?.label_conflicts?.length) notes.push(`${merged.label_conflicts.length} video(s) are labelled best in one sheet and bad in another; they count as best.`);
   if (excluded.length) notes.push(`${excluded.length} video(s) were excluded (failed, unlabelled or not yet analysed).`);
   const noSpeech = rows.filter(r => r.speech_ratio !== null && r.speech_ratio < 0.05).length;
   if (noSpeech) notes.push(`${noSpeech} video(s) have little or no speech; their dialogue patterns are missing.`);
@@ -223,6 +228,7 @@ export function buildDatasetProfile(items, excluded = []) {
     patterns: { winning: overall.winning.slice(0, 25), avoid: overall.avoid.slice(0, 25), by_genre: byGenrePatterns },
     exemplars,
     sheet_metadata: sheet,
+    merged: merged || null,
     notes,
   };
 }

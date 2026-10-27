@@ -9,23 +9,42 @@ import { buildDatasetProfile, extractFeatures, BUILDER_VERSION } from "./Dataset
 const M = () => db().models;
 const latest = (Model, video_id) => Model.findOne({ where: { video_id }, order: [["created_at", "DESC"]] });
 
-/** Labelled, analysed videos of the given training batches (one per URL; latest label wins), plus the ones that can't be used. */
+/**
+ * Labelled, analysed videos of the given training batches, plus the ones that can't be used.
+ * A video in several sheets counts once: the copy used is an analysed one (newest sheet first), and if any copy is
+ * labelled best the video counts as best (team rule for best/bad conflicts).
+ */
 async function loadTrainingItems(batches, excludeIds = new Set()) {
   const { Video, ScreenplayAnalysis, Transcript, StoryDNA, MatchResult } = M();
-  const videos = await Video.findAll({ where: { batch_id: batches.map(b => b.id), cancelled: false }, order: [["source_row_number", "ASC"]] });
+  const videos = await Video.findAll({ where: { batch_id: batches.map(b => b.id), cancelled: false } });
+  const batchOrder = new Map(batches.map((b, i) => [b.id, i])); // batches come oldest first
   const byUrl = new Map();
-  for (const v of videos) byUrl.set(v.normalized_url, v);
+  for (const v of videos) byUrl.set(v.normalized_url, [...(byUrl.get(v.normalized_url) || []), v]);
 
   const items = [], excluded = [];
-  for (const v of byUrl.values()) {
-    if (excludeIds.has(v.id)) { excluded.push({ video_id: v.id, url: v.video_url, reason: "excluded during review" }); continue; }
-    if (!v.performance_label) { excluded.push({ video_id: v.id, url: v.video_url, reason: "no performance label" }); continue; }
-    const analysis = await latest(ScreenplayAnalysis, v.id);
-    if (!analysis) { excluded.push({ video_id: v.id, url: v.video_url, reason: v.status === "FAILED" ? `failed: ${v.error_message || v.error_code}` : `not analysed yet (${v.status})` }); continue; }
+  const merged = { duplicate_rows: 0, videos_in_several_sheets: 0, label_conflicts: [] };
+  for (const copies of byUrl.values()) {
+    if (copies.length > 1) { merged.videos_in_several_sheets++; merged.duplicate_rows += copies.length - 1; }
+    const usable = copies.filter(c => !excludeIds.has(c.id));
+    if (!usable.length) { excluded.push({ video_id: copies[0].id, url: copies[0].video_url, reason: "excluded during review" }); continue; }
+    const labels = new Set(usable.map(c => c.performance_label).filter(Boolean));
+    const label = labels.has("best") ? "best" : labels.has("bad") ? "bad" : null;
+    if (labels.size > 1) merged.label_conflicts.push({ url: usable[0].video_url, counted_as: label });
+    if (!label) { excluded.push({ video_id: usable[0].id, url: usable[0].video_url, reason: "no performance label" }); continue; }
+
+    // newest sheet first; take the first copy that has an analysis
+    usable.sort((a, b) => (batchOrder.get(b.batch_id) ?? 0) - (batchOrder.get(a.batch_id) ?? 0));
+    let v = null, analysis = null;
+    for (const c of usable) { analysis = await latest(ScreenplayAnalysis, c.id); if (analysis) { v = c; break; } }
+    if (!analysis) {
+      const c = usable[0];
+      excluded.push({ video_id: c.id, url: c.video_url, reason: c.status === "FAILED" ? `failed: ${c.error_message || c.error_code}` : `not analysed yet (${c.status})` });
+      continue;
+    }
     const [transcript, dna, match] = await Promise.all([latest(Transcript, v.id), latest(StoryDNA, v.id), latest(MatchResult, v.id)]);
-    items.push({ video: v.toJSON(), analysis: analysis.normalized_analysis, transcript: transcript?.normalized_transcript || null, storyDna: dna?.story_dna || null, match: match?.toJSON() || null });
+    items.push({ video: { ...v.toJSON(), performance_label: label }, analysis: analysis.normalized_analysis, transcript: transcript?.normalized_transcript || null, storyDna: dna?.story_dna || null, match: match?.toJSON() || null });
   }
-  return { items, excluded };
+  return { items, excluded, merged };
 }
 
 /**
@@ -40,10 +59,10 @@ export async function buildDataset({ batchIds, name, excludeVideoIds } = {}) {
   const batches = await Batch.findAll({ where, order: [["created_at", "ASC"]] });
   if (!batches.length) throw badRequest("No training-dataset batches found. Upload a spreadsheet with purpose “Training dataset” first.");
 
-  const { items, excluded } = await loadTrainingItems(batches, new Set(excludeVideoIds || []));
+  const { items, excluded, merged } = await loadTrainingItems(batches, new Set(excludeVideoIds || []));
   if (!items.length) throw badRequest("No analysed, labelled videos yet — wait for the training batch to finish processing.");
 
-  const profile = buildDatasetProfile(items, excluded);
+  const profile = buildDatasetProfile(items, excluded, merged);
   const ds = await Dataset.create({
     name: name || `Dataset ${new Date().toISOString().slice(0, 16).replace("T", " ")}`,
     source_batch_ids: batches.map(b => b.id),

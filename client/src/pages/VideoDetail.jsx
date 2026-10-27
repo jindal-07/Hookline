@@ -78,7 +78,7 @@ export default function VideoDetail() {
           <div key={tab} className="anim-fade p-4 sm:p-5" role="tabpanel" aria-label={tabs.find(t => t.value === tab)?.label}>
             {tab === "match" && <MatchTab match={match} />}
             {tab === "transcript" && <TranscriptTab transcript={transcript} />}
-            {tab === "screenplay" && <ScreenplayTab analysis={analysis} />}
+            {tab === "screenplay" && <ScreenplayTab analysis={analysis} sheet={v.media_metadata?.sheet?.fields} />}
             {tab === "characters" && <CharactersTab analysis={analysis} match={match} />}
             {tab === "dna" && <DnaTab storyDna={storyDna} match={match} />}
             {tab === "script" && <ScriptTab video={v} script={script} history={data.scriptHistory} match={match} onImported={refresh} />}
@@ -224,14 +224,20 @@ function TranscriptTab({ transcript }) {
   );
 }
 
-function ScreenplayTab({ analysis }) {
+/** Gemini's value, plus the sheet's when it differs (the dataset uses the sheet's). */
+function withSheet(detected, fromSheet) {
+  if (!fromSheet || String(fromSheet).toLowerCase() === String(detected || "").toLowerCase()) return detected;
+  return <span key="s">{detected || "—"} <span className="font-normal text-muted">· your sheet: {fromSheet}</span></span>;
+}
+
+function ScreenplayTab({ analysis, sheet = {} }) {
   if (!analysis) return <Empty icon="film" title="No screenplay analysis yet" />;
   const a = analysis.normalized_analysis;
   const vs = a.visual_storytelling;
   return (
     <div className="grid gap-6">
       <div className="grid gap-4 md:grid-cols-2">
-        <InsetPanel title="Metadata"><KeyValue items={[["Duration", fmtTime(a.metadata.duration_seconds)], ["Language", a.metadata.primary_language], ["Genre", a.metadata.genre], ["Setting", a.metadata.setting], ["Tone", a.metadata.tone], ["Visual style", a.metadata.visual_style], ["Format", a.metadata.narrative_format]]} /></InsetPanel>
+        <InsetPanel title="Metadata"><KeyValue items={[["Duration", fmtTime(a.metadata.duration_seconds)], ["Language", a.metadata.primary_language], ["Genre", withSheet(a.metadata.genre, sheet.genre)], ["Subgenre", withSheet(a.metadata.subgenre, sheet.subgenre)], ["Setting", a.metadata.setting], ["Tone", a.metadata.tone], ["Visual style", a.metadata.visual_style], ["Format", a.metadata.narrative_format]]} /></InsetPanel>
         <InsetPanel title="Hook"><KeyValue items={[["Opening visual", a.hook.opening_visual], ["First seconds", a.hook.first_seconds], ["Attention element", a.hook.attention_element], ["Curiosity mechanism", a.hook.curiosity_mechanism], ["Initial question", a.hook.initial_question]]} /></InsetPanel>
       </div>
 
