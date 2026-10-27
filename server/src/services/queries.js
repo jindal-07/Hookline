@@ -4,6 +4,7 @@ import { db } from "../models/index.js";
 import { notFound } from "../utils/errors.js";
 import { summaryRow, detailedRecord } from "./export/Exporter.js";
 import { getScoringSettings } from "./settings.js";
+import { sheetEntries } from "./excel/sheetMetadata.js";
 
 const M = () => db().models;
 
@@ -77,6 +78,7 @@ export async function getVideoDetail(id) {
   ]);
   const v = video.toJSON();
   delete v.video_path; delete v.audio_path;
+  v.sheet_metadata = sheetEntries(v.media_metadata?.sheet);
   return { video: v, batch, transcript, analysis, match, storyDna, script, scriptHistory: scripts, logs };
 }
 
@@ -127,19 +129,40 @@ export async function dashboardStats({ batchId } = {}) {
     ${filter}`, { replacements: { thr: settings.matchThreshold, batchId }, type: QueryTypes.SELECT });
 
   const dist = await db().sequelize.query(`
-    SELECT LEAST(FLOOR(m.overall_score / 10), 9)::int AS bucket, COUNT(*)::int AS n
+    SELECT LEAST(FLOOR(m.overall_score / 10), 9)::int AS bucket, (m.overall_score >= :thr) AS above, COUNT(*)::int AS n
     FROM (SELECT DISTINCT ON (video_id) * FROM match_results ORDER BY video_id, created_at DESC) m
     JOIN videos v ON v.id = m.video_id
     WHERE m.overall_score IS NOT NULL ${batchId ? "AND v.batch_id = :batchId" : ""}
-    GROUP BY 1 ORDER BY 1`, { replacements: { batchId }, type: QueryTypes.SELECT });
+    GROUP BY 1, 2 ORDER BY 1`, { replacements: { thr: settings.matchThreshold, batchId }, type: QueryTypes.SELECT });
 
   return {
     ...row,
     avg_score: row.avg_score === null ? null : Number(row.avg_score),
     avg_confidence: row.avg_confidence === null ? null : Number(row.avg_confidence),
     threshold: settings.matchThreshold,
-    score_distribution: Array.from({ length: 10 }, (_, i) => ({ bucket: `${i * 10}–${i * 10 + 9}`, count: dist.find(d => d.bucket === i)?.n || 0 })),
+    score_distribution: scoreBuckets(dist, settings.matchThreshold),
   };
+}
+
+/**
+ * Ten-point buckets, except the one containing the threshold, which is split at it (75 → "70–74" below, "75–79" above),
+ * so the above-threshold bars always add up to the "Above threshold" count.
+ * @param {{ bucket: number, above: boolean, n: number }[]} rows  counts per decade and side of the threshold
+ */
+export function scoreBuckets(rows, threshold) {
+  const count = (i, above) => rows.filter(r => r.bucket === i && (above === undefined || r.above === above)).reduce((t, r) => t + r.n, 0);
+  const out = [];
+  for (let i = 0; i < 10; i++) {
+    const lo = i * 10, hi = lo + 9;
+    if (threshold > lo && threshold <= hi) {
+      const t = Math.ceil(threshold);
+      out.push({ bucket: `${lo}–${t - 1}`, from: lo, count: count(i, false), above: false });
+      out.push({ bucket: `${t}–${hi}`, from: t, count: count(i, true), above: true });
+    } else {
+      out.push({ bucket: `${lo}–${hi}`, from: lo, count: count(i), above: lo >= threshold });
+    }
+  }
+  return out;
 }
 
 /** Provider usage + latency recorded in processing logs (tokens, audio seconds, skill cost). */

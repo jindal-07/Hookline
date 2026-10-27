@@ -84,6 +84,29 @@ export const REASON_TEXT = {
   insufficient_evidence_quality: "Evidence quality too low",
 };
 
+/** A sheet metadata value for display, by its type (see server sheetMetadata.js). */
+export function fmtMeta(type, v) {
+  if (v === null || v === undefined || v === "") return "—";
+  switch (type) {
+    case "percent": return `${v}%`;
+    case "duration": return secs(v);
+    case "count": return Number(v).toLocaleString();
+    case "number": return Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
+    case "language": return String(v).toUpperCase();
+    case "list": return [].concat(v).join(", ");
+    default: return String(v);
+  }
+}
+
+export const isScriptBusy = (status) => status === "QUEUED" || status === "RUNNING";
+
+/** "m:ss" (or "h:mm:ss") since an ISO time. */
+export function elapsed(since, now = Date.now()) {
+  const t = Math.max(0, Math.floor((now - new Date(since).getTime()) / 1000));
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = String(t % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+}
+
 export function scriptStatus(s) {
   return {
     QUEUED: { kind: "info", label: "Queued", spinning: true },

@@ -35,11 +35,9 @@ services:
         sync: false
       - key: ASSEMBLYAI_API_KEY
         sync: false
-      - key: ANTHROPIC_API_KEY   # optional: automatic scripts (otherwise manual mode)
+      - key: ANTHROPIC_API_KEY   # needed for scripts on Render (the skill is bundled in skills/; manual mode can't work here)
         sync: false
       - key: SKILL_MODEL         # optional, e.g. claude-sonnet-5-5
-        sync: false
-      - key: SKILL_DIR           # optional: path to the scriptwriter skill folder if you add it to the repo
         sync: false
       - key: MEDIA_RETENTION_HOURS
         value: "0"               # disk is temporary on Render: delete media as soon as matching is done

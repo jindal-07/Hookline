@@ -107,6 +107,23 @@ export default function Upload() {
               {preview.summary.imported < preview.summary.valid && ` The other ${preview.summary.valid - preview.summary.imported} row(s) have no screenplay text and go through the normal video pipeline.`}
             </Alert>
           )}
+          {(preview.columns.metadata?.fields.length > 0 || preview.columns.metadata?.extra.length > 0) && (
+            <Card title="Metadata columns" subtitle="Recognised from your column names and saved with each video.">
+              {preview.columns.metadata.fields.length > 0 && (
+                <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {preview.columns.metadata.fields.map(f => (
+                    <li key={f.key} className="min-w-0 rounded-xl border border-border bg-[image:var(--mat-panel)] px-3 py-2 shadow-[var(--well)]">
+                      <p className="truncate text-sm"><span className="text-muted">“{f.header}”</span> → <b>{f.label}</b></p>
+                      <p className="text-xs text-muted">{f.use}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {preview.columns.metadata.extra.length > 0 && (
+                <p className="mt-3 text-sm text-muted"><b className="text-fg">Kept as they are:</b> {preview.columns.metadata.extra.join(", ")} — shown on each video and in the analysed sheet.</p>
+              )}
+            </Card>
+          )}
           {preview.columns.optional_missing.length > 0 && <Alert kind="info">Optional columns not found: {preview.columns.optional_missing.join(", ")}. Engagement metrics won't be shown for this batch.</Alert>}
 
           <Card

@@ -102,14 +102,14 @@ export async function analysisPreview(batchId) {
   const videos = await Video.findAll({ where: { batch_id: batch.id }, order: [["source_row_number", "ASC"]] });
   const rows = [];
   for (const v of videos) {
-    const base = { video_id: v.id, row: v.source_row_number, url: v.video_url, title: v.title, label: v.performance_label, status: v.status, views: v.views, error: v.status === "FAILED" ? v.error_message || v.error_code : null };
+    const base = { video_id: v.id, row: v.source_row_number, url: v.video_url, title: v.title, label: v.performance_label, status: v.status, views: v.views, error: v.status === "FAILED" ? v.error_message || v.error_code : null, sheet: v.media_metadata?.sheet || null };
     const analysis = await latest(ScreenplayAnalysis, v.id);
     if (!analysis || v.cancelled) { rows.push({ ...base, analysed: false }); continue; }
     const [transcript, dna, match] = await Promise.all([latest(Transcript, v.id), latest(StoryDNA, v.id), latest(MatchResult, v.id)]);
     const f = extractFeatures({ video: v.toJSON(), analysis: analysis.normalized_analysis, transcript: transcript?.normalized_transcript || null, storyDna: dna?.story_dna || null, match: match?.toJSON() || null });
     rows.push({
       ...base, analysed: true,
-      genre: f.genre, subgenre: f.subgenre, duration: f.duration, scene_count: f.scene_count, language: f.language,
+      genre: f.genre, subgenre: f.subgenre, genre_source: f.genre_source, subgenre_source: f.subgenre_source, duration: f.duration, scene_count: f.scene_count, language: f.language,
       hook_pattern: f.single.hook_pattern, ending_type: f.single.ending_type, pacing: f.single.pacing,
       emotional_arc: f.multi.emotion, narrative_format: f.single.narrative_format,
     });
@@ -118,6 +118,7 @@ export async function analysisPreview(batchId) {
   const usable = rows.filter(r => r.analysed && r.label);
   return {
     batch: { id: batch.id, filename: batch.filename, status: batch.status },
+    sheet_columns: batch.validation_report?.columns?.metadata || { fields: [], extra: [] },
     rows,
     summary: { total: rows.length, analysed: rows.filter(r => r.analysed).length, usable: usable.length, best: usable.filter(r => r.label === "best").length, bad: usable.filter(r => r.label === "bad").length, failed: rows.filter(r => r.status === "FAILED").length },
     in_dataset: ds ? { id: ds.id, name: ds.name, created_at: ds.created_at, included: (ds.source_batch_ids || []).includes(batch.id) } : null,

@@ -293,9 +293,9 @@ The skill's writing method lives in its `SKILL.md` and is never hardcoded. Gener
 | `manual` | For skills that only run inside an interactive Claude Code session. Writes `server/storage/skill-exchange/pending/<videoId>.json` (Story DNA plus instructions). Run the skill in Claude Code, then paste the script into **Video → Script → Import** (or `POST /api/videos/:id/script`). Imports go through the same originality checks. |
 | `disabled` | Story DNA only; scripts show "Skill not configured". |
 
-Defaults: `SKILL_DIR` is `../scriptwriter-skill-1.0.0` when that folder exists, and `SKILL_MODE` is `agent-sdk` when `ANTHROPIC_API_KEY` is set, otherwise `manual`.
+Defaults: `SKILL_DIR` is the bundled `skills/scriptwriter-skill/` (or `../scriptwriter-skill-1.0.0` if the bundled copy is missing), and `SKILL_MODE` is `agent-sdk` when `ANTHROPIC_API_KEY` is set, otherwise `manual`.
 
-**The skill is not part of this repository.** Keep your skill folder (the one containing `SKILL.md`) next to the project as `../scriptwriter-skill-1.0.0`, or set `SKILL_DIR` to its location, including on any server you deploy to. Without a skill, script generation shows "Skill not configured"; analysis, matching and the dataset still work.
+**The skill ships with this repository** in `skills/scriptwriter-skill/`, so deployments find it without any setting. To use a different skill, set `SKILL_DIR` to its folder (the one containing `SKILL.md`). Without a skill, script generation shows "Skill not configured"; analysis, matching and the dataset still work.
 
 How `agent-sdk` mode works:
 
@@ -309,7 +309,6 @@ Example:
 
 ```env
 SKILL_MODE=agent-sdk
-SKILL_DIR=../scriptwriter-skill-1.0.0
 ANTHROPIC_API_KEY=sk-ant-...
 SKILL_MODEL=claude-sonnet-5-5
 ```
@@ -412,7 +411,7 @@ Notes:
 - **Region.** `singapore`, next to a Neon database in `ap-southeast-1`. Change both together if you move.
 - **One instance.** With `QUEUE_DRIVER=memory`, run a single instance. To scale out, add Redis and set `QUEUE_DRIVER=bullmq` and `REDIS_URL`.
 - **Disk.** Render's disk is temporary, so the Blueprint sets `MEDIA_RETENTION_HOURS=0` (downloaded media is deleted once a video is matched).
-- **Skill.** The scriptwriter skill is not in this repository. For automatic scripts on Render, add the skill folder to the repository (e.g. `skills/scriptwriter-skill/`) and set `SKILL_DIR` to it.
+- **Scripts.** The skill is bundled in `skills/scriptwriter-skill/`; set `ANTHROPIC_API_KEY` (and optionally `SKILL_MODEL`) for automatic scripts. Manual mode doesn't work on Render: its job files are written to the server's disk. On the free plan, run one script at a time (512 MB) and keep the script page open while it writes, so the instance doesn't sleep mid-run (a script interrupted by sleep or a redeploy restarts and is charged again).
 - **Video downloads** from cloud servers can be blocked or rate-limited by Facebook; spreadsheets with `transcript` and `screenplay` columns don't download anything. The Linux build of yt-dlp may need Python 3 on the server; this has not been verified on Render.
 
 ---

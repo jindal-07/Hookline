@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, downloads, downloadFile } from "../services/api.js";
-import { useApi, useEvents, useDebounced } from "../hooks/index.js";
+import { useApi, useEvents, useDebounced, usePolling } from "../hooks/index.js";
 import { PageHeader } from "../components/Layout.jsx";
 import { Card, PageSkeleton, ErrorState, Alert, Badge, StatusBadge, KeyValue, Spinner } from "../components/ui.jsx";
 import { useToast, useConfirm, Menu } from "../components/controls.jsx";
 import Icon from "../components/Icons.jsx";
 import ScriptView, { layoutScreenplay } from "../components/ScriptView.jsx";
 import { fmtDate, secs, scriptStatus } from "../utils/format.js";
+import { Elapsed } from "./Scripts.jsx";
 
 export default function ScriptDetail() {
   const { id } = useParams();
@@ -16,7 +17,8 @@ export default function ScriptDetail() {
   const navigate = useNavigate();
   const { data: s, error, reload } = useApi(() => api.script(id), [id]);
   const refresh = useDebounced(() => reload({ silent: true }), 300);
-  useEvents((e) => e.type === "script" && e.script_id === id && refresh());
+  useEvents((e) => ((e.type === "script" && e.script_id === id) || e.type === "resync") && refresh());
+  usePolling(() => reload({ silent: true }), 8000, ["QUEUED", "RUNNING"].includes(s?.status)); // fallback if an event is missed
 
   if (error) return <ErrorState error={error} onRetry={reload} />;
   if (!s) return <PageSkeleton />;
@@ -46,7 +48,7 @@ export default function ScriptDetail() {
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="grid content-start gap-5">
-          {busy && <Alert kind="info" title="Writing…">The skill is generating this episode. This page updates automatically.</Alert>}
+          {busy && <Alert kind="info" title={s.status === "RUNNING" ? "Writing…" : "Queued"}>{s.status === "RUNNING" ? "The skill is writing this episode — usually a few minutes." : "Waiting for the writer to pick this up."} This page updates by itself when it's done. <Elapsed s={s} className="font-bold" /></Alert>}
           {s.status === "FAILED" && <Alert kind="error" title="Generation failed">{s.error_message}</Alert>}
           {s.status === "DISABLED" && <Alert kind="warning" title="No skill configured">Set SKILL_DIR and SKILL_MODE in .env, then rewrite.</Alert>}
           {s.status === "AWAITING_MANUAL" && (

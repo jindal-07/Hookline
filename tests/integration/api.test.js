@@ -75,7 +75,8 @@ describe("REST API", () => {
 
     const stats = await request(app).get("/api/stats").expect(200);
     expect(stats.body.avg_score).toBeGreaterThan(75);
-    expect(stats.body.score_distribution).toHaveLength(10);
+    // above-threshold bars add up to the "Above threshold" card
+    expect(stats.body.score_distribution.filter(b => b.above).reduce((t, b) => t + b.count, 0)).toBe(stats.body.above_threshold);
   });
 
   it("exports CSV, Excel and JSON (summary + detailed), with formula-injection protection", async () => {

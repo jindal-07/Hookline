@@ -12,7 +12,7 @@ import { fmtDate } from "../utils/format.js";
 export default function Batches() {
   const { data, error, reload } = useApi(() => api.batches());
   const refresh = useDebounced(() => reload({ silent: true }), 800);
-  useEvents((e) => e.type === "batch" && refresh());
+  useEvents((e) => (e.type === "batch" || e.type === "resync") && refresh());
   const { deleteOne, deleteCancelled } = useBatchDeletion();
   if (error) return <ErrorState error={error} onRetry={reload} />;
   if (!data) return <PageSkeleton />;

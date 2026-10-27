@@ -29,6 +29,29 @@ export function useDebounced(fn, ms = 400) {
   return useCallback((...a) => { clearTimeout(t.current); t.current = setTimeout(() => f.current(...a), ms); }, [ms]);
 }
 
+/** Calls fn every `ms` while `active` (a fallback for live events) and while the tab is visible. */
+export function usePolling(fn, ms, active) {
+  const f = useRef(fn);
+  f.current = fn;
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => { if (document.visibilityState === "visible") f.current(); }, ms);
+    return () => clearInterval(id);
+  }, [ms, active]);
+}
+
+/** Current time, re-rendering every `ms` while `active` — for live elapsed timers. */
+export function useNow(ms = 1000, active = true) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), ms);
+    return () => clearInterval(id);
+  }, [ms, active]);
+  return now;
+}
+
 export function useTheme() {
   const [theme, setTheme] = useState(() => document.documentElement.dataset.theme || "light");
   const toggle = useCallback(() => {

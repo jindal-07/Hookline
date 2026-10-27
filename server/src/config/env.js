@@ -9,7 +9,10 @@ import { DEFAULT_SCORING } from "@reelscript/shared";
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT_DIR = path.resolve(here, "../../..");
 export const SERVER_DIR = path.resolve(here, "../..");
-export const DEFAULT_SKILL_DIR = path.resolve(ROOT_DIR, "..", "scriptwriter-skill-1.0.0");
+// The scriptwriter skill ships in the repo (skills/), so deployments find it without SKILL_DIR; the folder next to
+// the repo is the older local layout.
+export const DEFAULT_SKILL_DIR = [path.resolve(ROOT_DIR, "skills", "scriptwriter-skill"), path.resolve(ROOT_DIR, "..", "scriptwriter-skill-1.0.0")]
+  .find(d => existsSync(path.join(d, "SKILL.md"))) || path.resolve(ROOT_DIR, "skills", "scriptwriter-skill");
 
 dotenv.config({ path: path.join(ROOT_DIR, ".env"), quiet: true });
 

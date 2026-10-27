@@ -411,14 +411,16 @@
    US-letter proportions (8.5in wide): 1.5in left / 1in right margin; dialogue 2.5in–6in; cue at 3.7in;
    parenthetical 3.1in–5.5in. Everything is a percentage of the page so it scales with the screen.
    Paper stays off-white in both themes — it's a document. */
-.sp-desk { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; justify-items: center; min-width: 0; }
+.sp-desk { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; justify-items: center; min-width: 0; container-type: inline-size; }
 .sp-page {
   container-type: inline-size;
-  position: relative; width: 100%; max-width: 816px; aspect-ratio: 8.5 / 11;
+  position: relative; width: 100%; max-width: 680px; aspect-ratio: 8.5 / 11; /* text scales with the page: 680px ≈ 13px type */
   background: #fdfcf8; color: #1a1a1a; border-radius: 3px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 8px 24px -6px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05);
   font-family: "Courier Prime", "Courier New", Courier, monospace;
-  font-size: clamp(9.5px, 1.96cqw, 16px); line-height: 1.25; /* 9.5px floor keeps phones readable; the page grows */
+  /* 12pt on an 8.5in page = 1.96% of the page width. cqw here is the desk's width (= the page's until the 680px cap, where the
+     type stops at 13.33px), so lines stay ~60 characters. 9.5px floor keeps phones readable; the page grows. */
+  font-size: clamp(9.5px, 1.96cqw, 13.33px); line-height: 1.25;
   padding: 11.76% 11.76% 11.76% 17.65%; /* 1in top, right and bottom; 1.5in left */
   /* aspect-ratio is the minimum: if the line estimate under-counts, the page grows instead of clipping text */
 }

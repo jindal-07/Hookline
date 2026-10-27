@@ -30,7 +30,7 @@ export default function Overview() {
         <MetricCard label="Processing" value={s.processing + s.pending} hint={`${s.pending} queued`} tone="info" icon="clock" />
         <MetricCard label="Completed" value={s.completed} tone="success" icon="checkCircle" />
         <MetricCard label="Failed" value={s.failed} tone={s.failed ? "error" : undefined} icon="xCircle" />
-        <MetricCard label="Above threshold" value={s.above_threshold} hint={`threshold ${s.threshold}`} icon="check" />
+        <MetricCard label="Above threshold" value={s.above_threshold} hint={`threshold ${s.threshold} · ${s.eligible} approved`} icon="check" />
         <MetricCard label="Scripts" value={s.scripts_generated} tone="ai" icon="sparkles" />
         <MetricCard label="Avg. score" value={fmtScore(s.avg_score)} hint={`avg. confidence ${fmtConf(s.avg_confidence)}`} icon="dashboard" />
       </div>
@@ -72,6 +72,12 @@ export default function Overview() {
 
         <Card title="Match score distribution" subtitle="Latest score per video">
           <ScoreChart data={s.score_distribution} threshold={s.threshold} />
+          {s.above_threshold + s.eligible > 0 && (
+            <p className="mt-4 text-sm text-muted">
+              <b className="tabular text-fg">{s.above_threshold}</b> scored {s.threshold} or more · <b className="tabular text-fg">{s.eligible}</b> approved for scripts
+              {s.above_threshold > s.eligible && <> — the other {s.above_threshold - s.eligible} have a high score but not enough confidence in it, or too many mismatches</>}.
+            </p>
+          )}
         </Card>
       </div>
     </>
@@ -84,7 +90,7 @@ export function BatchBadge({ status }) {
   return <Badge kind={kind} spinning={status === "PROCESSING"}>{label}</Badge>;
 }
 
-/** Accessible bar chart: buckets at or above the threshold use the primary (yellow) series. */
+/** Accessible bar chart: buckets at or above the threshold use the primary (yellow) series (the server splits the bucket the threshold falls in). */
 function ScoreChart({ data, threshold }) {
   const max = Math.max(1, ...data.map(d => d.count));
   const total = data.reduce((t, d) => t + d.count, 0);
@@ -92,14 +98,14 @@ function ScoreChart({ data, threshold }) {
   return (
     <ChartContainer
       label={`Score distribution: ${data.map(d => `${d.bucket}: ${d.count}`).join(", ")}`}
-      axis={data.map(d => <span key={d.bucket} className="flex-1 text-center">{d.bucket.split("–")[0]}</span>)}
+      axis={data.map(d => <span key={d.bucket} className="flex-1 text-center">{d.from}</span>)}
       legend={<>
         <LegendItem className="bg-chart-primary">At or above threshold ({threshold})</LegendItem>
         <LegendItem className="bg-border-strong">Below threshold</LegendItem>
       </>}
     >
       {data.map((d, i) => {
-        const above = i * 10 >= threshold;
+        const above = d.above;
         return (
           <div key={d.bucket} className="group flex h-full min-w-0 flex-1 flex-col justify-end" title={`${d.bucket}: ${d.count}`}>
             <span className="mb-1 text-center text-[10px] font-bold tabular text-muted opacity-0 transition-opacity group-hover:opacity-100">{d.count}</span>

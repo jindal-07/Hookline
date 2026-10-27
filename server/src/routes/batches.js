@@ -26,7 +26,8 @@ r.post("/", uploadLimiter, upload.single("file"), asyncRoute(async (req, res) =>
     const b = await models.Batch.create({
       filename: parsed.filename.slice(0, 255),
       purpose,
-      validation_report: { summary: parsed.summary, columns: parsed.columns, sheet: parsed.sheet, header_row: parsed.header_row, rows: parsed.rows.map(lite) },
+      // sheet metadata lives on each video; the stored report keeps only validation details
+      validation_report: { summary: parsed.summary, columns: parsed.columns, sheet: parsed.sheet, header_row: parsed.header_row, rows: parsed.rows.map(row => ({ ...lite(row), metadata: undefined })) },
     }, { transaction });
     const valid = parsed.rows.filter(row => row.valid);
     await models.Video.bulkCreate(valid.map(row => ({
@@ -34,7 +35,7 @@ r.post("/", uploadLimiter, upload.single("file"), asyncRoute(async (req, res) =>
       source_row_number: row.row, title: row.title, category: row.category,
       views: row.views, likes: row.likes, shares: row.shares, comments: row.comments,
       performance_label: row.performance,
-      ...(row.import ? { media_metadata: { import: row.import } } : {}),
+      media_metadata: { ...(row.import ? { import: row.import } : {}), ...(row.metadata ? { sheet: row.metadata } : {}) },
     })), { transaction });
     await b.update({ total_videos: valid.length }, { transaction });
     return b;

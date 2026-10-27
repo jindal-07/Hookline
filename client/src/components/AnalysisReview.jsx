@@ -8,7 +8,7 @@ import { Card, Badge, Alert, Spinner, Loading, ErrorState, TableScroll, Empty } 
 import { useToast } from "./controls.jsx";
 import { Checkbox } from "./forms.jsx";
 import Icon from "./Icons.jsx";
-import { secs, fmtDate, videoStatus } from "../utils/format.js";
+import { secs, fmtDate, videoStatus, fmtMeta } from "../utils/format.js";
 import { StatusBadge } from "./ui.jsx";
 
 const COLUMNS = [
@@ -17,9 +17,20 @@ const COLUMNS = [
   ["pacing", "Pacing"], ["ending_type", "Ending"], ["emotional_arc", "Emotional arc"], ["status", "Status"],
 ];
 
-function downloadCsv(filename, rows) {
+// Long free-text sheet fields stay out of the table (they're on the video page); genre/subgenre/language are merged in.
+const TABLE_SKIP = new Set(["genre", "subgenre", "language", "description", "hook", "notes"]);
+/** Sheet columns shown in the table and CSV: recognised fields, then the sheet's other columns as text. */
+function sheetCols(sc) {
+  return [
+    ...(sc?.fields || []).filter(f => !TABLE_SKIP.has(f.key)).map(f => ({ id: f.key, header: f.header, type: f.type, get: r => r.sheet?.fields?.[f.key] })),
+    ...(sc?.extra || []).map(h => ({ id: `x:${h}`, header: h, type: "text", get: r => r.sheet?.extra?.[h] })),
+  ];
+}
+
+function downloadCsv(filename, rows, extraCols) {
   const cell = (v) => { const s = Array.isArray(v) ? v.join(" → ") : v ?? ""; return /[",\n]/.test(String(s)) ? `"${String(s).replace(/"/g, '""')}"` : String(s); };
-  const csv = [COLUMNS.map(c => c[1]).join(","), ...rows.map(r => COLUMNS.map(([k]) => cell(r[k])).join(","))].join("\n");
+  const csv = [[...COLUMNS.map(c => c[1]), "Genre source", ...extraCols.map(c => c.header)].map(cell).join(","),
+    ...rows.map(r => [...COLUMNS.map(([k]) => cell(r[k])), cell(r.genre_source), ...extraCols.map(c => cell(c.get(r)))].join(","))].join("\n");
   const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
   const a = Object.assign(document.createElement("a"), { href: url, download: filename.replace(/\.(xlsx|xls)$/i, "") + "-analysed.csv" });
   a.click();
@@ -51,11 +62,13 @@ export default function AnalysisReview({ batchId, batchStatus }) {
   const navigate = useNavigate();
   const { data, error, reload } = useApi(() => api.batchAnalysis(batchId), [batchId]);
   const refresh = useDebounced(() => reload({ silent: true }), 700);
-  useEvents((e) => (e.batch_id === batchId || e.type === "dataset") && refresh(), { batchId });
+  useEvents((e) => (e.batch_id === batchId || e.type === "dataset" || e.type === "resync") && refresh(), { batchId });
   const [excluded, setExcluded] = useState(() => new Set());
   const [building, setBuilding] = useState(false);
 
   const rows = useMemo(() => data?.rows || [], [data]);
+  const metaCols = useMemo(() => sheetCols(data?.sheet_columns), [data]);
+  const sheetFields = data?.sheet_columns?.fields || [];
   const usable = rows.filter(r => r.analysed && r.label);
   const selected = usable.filter(r => !excluded.has(r.video_id));
   const finished = batchStatus === "COMPLETED";
@@ -83,7 +96,7 @@ export default function AnalysisReview({ batchId, batchStatus }) {
     <Card
       title="Analysed sheet"
       subtitle="What AssemblyAI + Gemini found for each video — exactly what the dataset will compare. Untick rows you don't want included, then build the dataset."
-      action={rows.some(r => r.analysed) && <button className="btn-secondary btn-sm" onClick={() => downloadCsv(data.batch.filename, rows)}><Icon name="download" className="size-3.5" />Download .csv</button>}
+      action={rows.some(r => r.analysed) && <button className="btn-secondary btn-sm" onClick={() => downloadCsv(data.batch.filename, rows, metaCols)}><Icon name="download" className="size-3.5" />Download .csv</button>}
       bodyClass="p-0"
     >
       <div className="grid gap-4 border-b border-border p-4 sm:p-5">
@@ -94,6 +107,14 @@ export default function AnalysisReview({ batchId, batchStatus }) {
           <Badge kind="error">{data.summary.bad} bad</Badge>
           {data.summary.failed > 0 && <Badge kind="warning">{data.summary.failed} failed — not usable</Badge>}
         </div>
+        {(sheetFields.length > 0 || metaCols.length > 0) && (
+          <Alert kind="ai" title="Metadata from your sheet">
+            {sheetFields.length > 0 && <>Recognised: {sheetFields.map(f => `${f.label} (“${f.header}”)`).join(", ")}. </>}
+            {sheetFields.some(f => f.key === "genre" || f.key === "subgenre") && <>Your genre/subgenre are used instead of Gemini's (marked <Badge kind="ai">sheet</Badge>). </>}
+            {(data.sheet_columns.extra || []).length > 0 && <>Also kept: {data.sheet_columns.extra.join(", ")}. </>}
+            Metrics are compared between best and bad videos on the Dataset page.
+          </Alert>
+        )}
         {!finished && <Alert kind="info" title="Analysis in progress">Rows fill in as each video is analysed. You can build the dataset once the batch has finished.</Alert>}
         {included && <Alert kind="success" title="Included in the current dataset" action={<Link to="/dataset" className="btn-secondary btn-sm"><Icon name="dna" className="size-3.5" />Open dataset</Link>}>{data.in_dataset.name} · built {fmtDate(data.in_dataset.created_at)}. Rebuild below if you change the selection.</Alert>}
       </div>
@@ -113,12 +134,13 @@ export default function AnalysisReview({ batchId, batchStatus }) {
                   <p className="text-xs text-muted">Row {r.row}</p>
                   {r.analysed ? (
                     <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                      <div><dt className="text-muted">Genre</dt><dd className="font-bold">{r.genre}</dd></div>
+                      <div><dt className="text-muted">Genre</dt><dd className="font-bold">{r.genre}{r.genre_source === "sheet" && <> <Badge kind="ai">sheet</Badge></>}</dd></div>
                       <div><dt className="text-muted">Subgenre</dt><dd className="font-bold">{r.subgenre}</dd></div>
                       <div><dt className="text-muted">Length</dt><dd className="font-bold tabular">{secs(r.duration)} · {r.scene_count} scenes</dd></div>
                       <div><dt className="text-muted">Language</dt><dd className="font-bold">{r.language}</dd></div>
                       {r.hook_pattern && <div className="col-span-2"><dt className="text-muted">Hook</dt><dd className="font-semibold">{r.hook_pattern}</dd></div>}
                       {r.ending_type && <div className="col-span-2"><dt className="text-muted">Ending</dt><dd className="font-semibold">{r.ending_type}</dd></div>}
+                      {metaCols.filter(c => c.get(r) !== undefined).map(c => <div key={c.id}><dt className="text-muted">{c.header}</dt><dd className="font-semibold tabular break-words">{fmtMeta(c.type, c.get(r))}</dd></div>)}
                     </dl>
                   ) : <div className="mt-2"><StatusBadge s={videoStatus(r.status)} />{r.error && <p className="mt-1 text-xs text-error">{r.error}</p>}</div>}
                 </div>
@@ -132,6 +154,7 @@ export default function AnalysisReview({ batchId, batchStatus }) {
                 <tr>
                   <th className="w-10"><Checkbox checked={allOn} indeterminate={excluded.size > 0 && excluded.size < usable.length} onChange={() => setExcluded(allOn ? new Set(usable.map(r => r.video_id)) : new Set())} label="Include all rows" /></th>
                   <th>Row</th><th>Video</th><th>Performance</th><th>Genre</th><th>Subgenre</th><th className="text-right">Length</th><th className="text-right">Scenes</th><th>Lang.</th><th>Hook</th><th>Pacing</th><th>Ending</th><th>Emotional arc</th>
+                  {metaCols.map(c => <th key={c.id} className={["count", "number", "percent", "duration"].includes(c.type) ? "text-right" : ""} title="From your sheet">{c.header}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -145,7 +168,7 @@ export default function AnalysisReview({ batchId, batchStatus }) {
                       <td className="max-w-56"><Link to={`/videos/${r.video_id}`} className="block truncate font-bold hover:underline" title={r.url}>{r.title || r.url.replace(/^https?:\/\/(www\.)?/, "")}</Link></td>
                       <td>{r.label ? <Badge kind={r.label === "best" ? "success" : "error"}>{r.label === "best" ? "Best" : "Bad"}</Badge> : <span className="text-muted">—</span>}</td>
                       {r.analysed ? (<>
-                        <td className="font-bold">{r.genre}</td>
+                        <td className="font-bold">{r.genre}{r.genre_source === "sheet" && <span className="ml-1.5 align-middle"><Badge kind="ai">sheet</Badge></span>}</td>
                         <td>{r.subgenre}</td>
                         <td className="text-right tabular">{secs(r.duration)}</td>
                         <td className="text-right tabular">{r.scene_count}</td>
@@ -154,8 +177,9 @@ export default function AnalysisReview({ batchId, batchStatus }) {
                         <td className="max-w-36 truncate" title={r.pacing || ""}>{r.pacing || "—"}</td>
                         <td className="max-w-40 truncate" title={r.ending_type || ""}>{r.ending_type || "—"}</td>
                         <td className="max-w-56 truncate text-xs text-muted" title={r.emotional_arc.join(" → ")}>{r.emotional_arc.join(" → ") || "—"}</td>
+                        {metaCols.map(c => <td key={c.id} className={`max-w-48 truncate ${["count", "number", "percent", "duration"].includes(c.type) ? "text-right tabular" : ""}`} title={String(c.get(r) ?? "")}>{fmtMeta(c.type, c.get(r))}</td>)}
                       </>) : (
-                        <td colSpan={9}><span className="flex items-center gap-2"><StatusBadge s={videoStatus(r.status)} />{r.error && <span className="truncate text-xs text-error" title={r.error}>{r.error}</span>}</span></td>
+                        <td colSpan={9 + metaCols.length}><span className="flex items-center gap-2"><StatusBadge s={videoStatus(r.status)} />{r.error && <span className="truncate text-xs text-error" title={r.error}>{r.error}</span>}</span></td>
                       )}
                     </tr>
                   );

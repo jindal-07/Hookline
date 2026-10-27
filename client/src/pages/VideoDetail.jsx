@@ -7,7 +7,7 @@ import { Card, PageSkeleton, ErrorState, Empty, Alert, Badge, StatusBadge, Score
 import { useToast, useConfirm, Tooltip } from "../components/controls.jsx";
 import Icon from "../components/Icons.jsx";
 import ScriptView from "../components/ScriptView.jsx";
-import { videoStatus, matchStatus, generationStatus, taskStatus, fmtScore, fmtConf, fmtTime, fmtInt, fmtDate, fmtMs, titleCase, REASON_TEXT } from "../utils/format.js";
+import { videoStatus, matchStatus, generationStatus, taskStatus, fmtScore, fmtConf, fmtTime, fmtInt, fmtDate, fmtMs, titleCase, REASON_TEXT, fmtMeta } from "../utils/format.js";
 
 export default function VideoDetail() {
   const { id } = useParams();
@@ -16,7 +16,7 @@ export default function VideoDetail() {
   const { data, error, reload } = useApi(() => api.video(id), [id]);
   const settings = useApi(() => api.settings());
   const refresh = useDebounced(() => reload({ silent: true }), 500);
-  useEvents((e) => e.video_id === id && refresh());
+  useEvents((e) => (e.video_id === id || e.type === "resync") && refresh());
 
   if (error) return <ErrorState error={error} onRetry={reload} />;
   if (!data) return <PageSkeleton />;
@@ -64,6 +64,12 @@ export default function VideoDetail() {
 
           <Card title="Provided metadata">
             <KeyValue items={[["Category", v.category], ["Views", fmtInt(v.views)], ["Likes", fmtInt(v.likes)], ["Shares", fmtInt(v.shares)], ["Comments", fmtInt(v.comments)], ["Normalised URL", <span key="u" className="mono text-xs">{v.normalized_url}</span>]]} />
+            {v.sheet_metadata?.length > 0 && (
+              <div className="mt-4 border-t border-border pt-4">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">From your sheet</p>
+                <KeyValue items={v.sheet_metadata.map(e => [e.label, <span key={e.label} className="whitespace-pre-wrap break-words">{fmtMeta(e.type, e.value)}</span>])} />
+              </div>
+            )}
           </Card>
         </div>
 

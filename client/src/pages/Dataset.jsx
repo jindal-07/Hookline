@@ -6,7 +6,7 @@ import { PageHeader } from "../components/Layout.jsx";
 import { Card, PageSkeleton, ErrorState, Empty, Alert, Badge, MetricCard, Spinner, TableScroll, ChartContainer, LegendItem } from "../components/ui.jsx";
 import { Tooltip, IconButton, useToast } from "../components/controls.jsx";
 import Icon from "../components/Icons.jsx";
-import { fmtDate, pct, secs } from "../utils/format.js";
+import { fmtDate, pct, secs, fmtMeta } from "../utils/format.js";
 
 const FEATURE_LABEL = {
   hook_pattern: "Hook", pacing: "Pacing", ending_type: "Ending", arc_opening: "Opens on", arc_closing: "Closes on",
@@ -20,7 +20,7 @@ export default function Dataset() {
   const { data: ds, error, reload } = useApi(() => api.latestDataset().catch(e => (e.status === 404 ? null : Promise.reject(e))));
   const batches = useApi(() => api.batches());
   const refresh = useDebounced(() => { reload({ silent: true }); batches.reload({ silent: true }); }, 800);
-  useEvents((e) => (e.type === "dataset" || e.type === "batch") && refresh());
+  useEvents((e) => (e.type === "dataset" || e.type === "batch" || e.type === "resync") && refresh());
 
   async function rebuild() {
     setBuilding(true);
@@ -111,6 +111,8 @@ export default function Dataset() {
           </Card>
         </div>
 
+        {(p.sheet_metadata?.metrics.length > 0 || p.sheet_metadata?.categories.length > 0) && <SheetMetadataCard sm={p.sheet_metadata} baseline={o.best_share} />}
+
         <div className="grid gap-5 xl:grid-cols-2">
           <PatternCard title="What worked" subtitle="Much more common in best videos than in bad ones" kind="success" items={p.patterns.winning} best={o.best} bad={o.bad} />
           <PatternCard title="What to skip" subtitle="Much more common in bad videos than in best ones" kind="error" items={p.patterns.avoid} best={o.best} bad={o.bad} />
@@ -180,6 +182,52 @@ function PatternCard({ title, subtitle, kind, items, best, bad }) {
             </li>
           ))}
         </ul>
+      )}
+    </Card>
+  );
+}
+
+/** The team's own sheet columns, best vs bad: metric medians, and win rate by platform / series / creator / audience. */
+function SheetMetadataCard({ sm, baseline }) {
+  return (
+    <Card title="From your sheet" subtitle="Your own metrics and categories, compared between best and bad videos. Groups under 3 videos are greyed out." bodyClass="p-0">
+      {sm.metrics.length > 0 && (
+        <TableScroll label="Sheet metrics, best vs bad">
+          <table className="table min-w-[560px]">
+            <thead><tr><th>Metric</th><th className="text-right">Best (median)</th><th className="text-right">Bad (median)</th><th className="text-right">Best ÷ bad</th><th className="text-right">Videos</th></tr></thead>
+            <tbody>
+              {sm.metrics.map(m => (
+                <tr key={m.key} className={m.low_sample ? "opacity-55" : ""}>
+                  <td className="font-bold">{m.label}</td>
+                  <td className="text-right tabular text-success">{fmtMeta(m.type, m.best.median)}</td>
+                  <td className="text-right tabular text-error">{fmtMeta(m.type, m.bad.median)}</td>
+                  <td className="text-right tabular">{m.ratio ? `×${m.ratio}` : "—"}</td>
+                  <td className="text-right tabular text-muted">{m.best.n} / {m.bad.n}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableScroll>
+      )}
+      {sm.categories.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 border-t border-border p-4 sm:p-5 lg:grid-cols-2">
+          {sm.categories.map(c => (
+            <div key={c.key} className="min-w-0">
+              <p className="mb-2 text-sm font-bold">{c.label} <span className="font-normal text-muted">· {c.coverage} videos</span></p>
+              <ul className="grid gap-1.5">
+                {c.values.map(v => (
+                  <li key={v.value} className={`flex items-center justify-between gap-3 text-sm ${v.low_sample ? "opacity-55" : ""}`}>
+                    <span className="min-w-0 truncate">{v.value}</span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span className="tabular text-xs text-muted">{v.best} best · {v.bad} bad</span>
+                      <Badge kind={v.low_sample ? "neutral" : v.win_rate >= baseline + 0.15 ? "success" : v.win_rate <= baseline - 0.15 ? "error" : "warning"}>{pct(v.win_rate)}</Badge>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
       )}
     </Card>
   );

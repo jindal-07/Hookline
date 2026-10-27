@@ -5,6 +5,9 @@ import { OPTIONAL_COLUMNS } from "@reelscript/shared";
 import { normalizeVideoUrl, UrlValidationError } from "../url/UrlValidator.js";
 import { badRequest } from "../../utils/errors.js";
 import { fixMojibake, parseDuration, screenplayDuration } from "../importing/textImport.js";
+import { parseCount, detectMetadataColumns, readMetadata, describeColumns } from "./sheetMetadata.js";
+
+export { parseCount };
 
 const URL_HEADER = /^video[\s_-]*url$/i;
 const HEADER_SCAN_ROWS = 10;
@@ -27,17 +30,6 @@ const IMPORT_HEADERS = {
   duration: /^(duration|duration_sec|duration_secs|duration_seconds|length|length_sec|video_duration|seconds)$/,
 };
 const MAX_IMPORT_CHARS = 200_000;
-
-/** "250,000" | "1.2K" | "3M" | 1200 → integer, or null. Returns { value, error }. */
-export function parseCount(raw) {
-  if (raw === null || raw === undefined || raw === "") return { value: null };
-  if (typeof raw === "number") return Number.isFinite(raw) && raw >= 0 ? { value: Math.round(raw) } : { value: null, error: "must be a non-negative number" };
-  const s = String(raw).trim().replace(/[,\s_]/g, "");
-  const m = s.match(/^(\d+(?:\.\d+)?)([kmb])?$/i);
-  if (!m) return { value: null, error: `"${raw}" is not a number` };
-  const mult = { k: 1e3, m: 1e6, b: 1e9 }[(m[2] || "").toLowerCase()] || 1;
-  return { value: Math.round(parseFloat(m[1]) * mult) };
-}
 
 const clean = v => (v === undefined || v === null ? "" : String(v).trim());
 
@@ -90,6 +82,9 @@ export function parseSpreadsheet(buffer, { filename = "upload", allowedHosts, ma
   // Existing transcript/screenplay text is only used for training datasets (generation needs the real video for matching).
   const importCol = Object.fromEntries(Object.entries(IMPORT_HEADERS).map(([k, re]) => [k, datasetMode ? headers.findIndex(h => re.test(h)) : -1]));
   const importMode = importCol.screenplay >= 0;
+  // Every other named column is video metadata (genre, retention, publish date… or kept under its own name).
+  const taken = new Set([urlCol, ...Object.values(colIndex), ...Object.values(importCol)].filter(i => i >= 0));
+  const metaCols = detectMetadataColumns(headers, grid[headerRow].map(h => clean(h).replace(/^\uFEFF/, "")), taken);
 
   const rows = [];
   const seen = new Map(); // normalized_url → first row number
@@ -155,6 +150,9 @@ export function parseSpreadsheet(buffer, { filename = "upload", allowedHosts, ma
         row.warnings.push("no screenplay text — this video will be downloaded and analysed instead");
       }
     }
+    const meta = readMetadata(cells, metaCols);
+    if (meta.metadata) row.metadata = meta.metadata;
+    row.warnings.push(...meta.warnings);
     if (row.title) row.title = fixMojibake(row.title);
     row.valid = row.errors.length === 0;
     rows.push(row);
@@ -179,6 +177,7 @@ export function parseSpreadsheet(buffer, { filename = "upload", allowedHosts, ma
       optional_found: OPTIONAL_COLUMNS.filter(c => colIndex[c] >= 0),
       optional_missing: OPTIONAL_COLUMNS.filter(c => colIndex[c] < 0),
       import_found: Object.keys(importCol).filter(k => importCol[k] >= 0),
+      metadata: describeColumns(metaCols),
     },
     rows,
     summary,

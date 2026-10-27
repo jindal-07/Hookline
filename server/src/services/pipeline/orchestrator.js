@@ -28,6 +28,7 @@ import { rawTranscriptFromText } from "../importing/textImport.js";
 /** Training video imported with transcript + screenplay text: analysed from text, never downloaded. */
 const importedText = (video) => video.media_metadata?.import || null;
 import { playbookFor } from "../dataset/DatasetBuilder.js";
+import { analysisContext } from "../excel/sheetMetadata.js";
 import { classifyError, permanent, badRequest, conflict, notFound } from "../../utils/errors.js";
 import { logger } from "../../utils/logger.js";
 
@@ -255,7 +256,7 @@ const analyze = stageHandler(STAGES.ANALYZE, async (video) => {
     await setVideo(video, { analysis_status: TASK_STATUS.RUNNING, status: VIDEO_STATUS.SCREENPLAY_ANALYSIS, current_stage: STAGES.ANALYZE });
     const analyzer = providers.analyzer();
     if (typeof analyzer.analyzeScreenplayText !== "function") throw permanent("ANALYZER_NO_TEXT", `The "${analyzer.name}" analyzer cannot analyse screenplay text`);
-    const r = await analyzer.analyzeScreenplayText(imp.screenplay, { videoId: video.id, videoKey: video.normalized_url, durationSeconds: imp.duration });
+    const r = await analyzer.analyzeScreenplayText(imp.screenplay, { videoId: video.id, videoKey: video.normalized_url, durationSeconds: imp.duration, context: analysisContext(video.media_metadata?.sheet) });
     const { analysis, repairs, evidence } = normalizeScreenplay(r.analysis, { durationSeconds: imp.duration });
     const check = validate("screenplay", analysis);
     if (!check.valid) throw permanent("ANALYSIS_INVALID", `Screenplay analysis failed validation after normalisation: ${check.errors.slice(0, 3).join("; ")}`);
@@ -266,7 +267,7 @@ const analyze = stageHandler(STAGES.ANALYZE, async (video) => {
   }
   if (!video.video_path || !existsSync(video.video_path)) { await enqueue(STAGES.DOWNLOAD, video.id); return { redownload: true }; }
   await setVideo(video, { analysis_status: TASK_STATUS.RUNNING, status: VIDEO_STATUS.SCREENPLAY_ANALYSIS, current_stage: STAGES.ANALYZE });
-  const r = await providers.analyzer().analyzeVideo(video.video_path, { videoId: video.id, videoKey: video.normalized_url, durationSeconds: video.media_metadata?.download?.duration_seconds });
+  const r = await providers.analyzer().analyzeVideo(video.video_path, { videoId: video.id, videoKey: video.normalized_url, durationSeconds: video.media_metadata?.download?.duration_seconds, context: analysisContext(video.media_metadata?.sheet) });
   const { analysis, repairs, evidence } = normalizeScreenplay(r.analysis, { durationSeconds: video.media_metadata?.download?.duration_seconds });
   const check = validate("screenplay", analysis);
   if (!check.valid) throw permanent("ANALYSIS_INVALID", `Screenplay analysis failed validation after normalisation: ${check.errors.slice(0, 3).join("; ")}`);

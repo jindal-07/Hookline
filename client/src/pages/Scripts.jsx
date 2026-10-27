@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, downloads, downloadFile } from "../services/api.js";
-import { useApi, useEvents, useDebounced } from "../hooks/index.js";
+import { useApi, useEvents, useDebounced, usePolling, useNow } from "../hooks/index.js";
 import { PageHeader } from "../components/Layout.jsx";
 import { Card, Loading, PageSkeleton, ErrorState, Empty, Alert, Badge, StatusBadge, Spinner } from "../components/ui.jsx";
 import { Select, IconButton, Menu, useToast, useConfirm } from "../components/controls.jsx";
 import { FormField } from "../components/forms.jsx";
 import Icon from "../components/Icons.jsx";
-import { fmtDate, pct, secs, scriptStatus } from "../utils/format.js";
+import { fmtDate, pct, secs, scriptStatus, isScriptBusy, elapsed } from "../utils/format.js";
 
 const LANGS = { hi: "Hindi", en: "English", ta: "Tamil", te: "Telugu", bn: "Bengali", mr: "Marathi", gu: "Gujarati", pa: "Punjabi", ur: "Urdu" };
 
@@ -17,7 +17,14 @@ export default function Scripts() {
   const settings = useApi(() => api.settings());
   const scripts = useApi(() => api.scripts());
   const refresh = useDebounced(() => scripts.reload({ silent: true }), 500);
-  useEvents((e) => (e.type === "script" ? refresh() : e.type === "dataset" && dataset.reload({ silent: true })));
+  useEvents((e) => {
+    if (e.type === "script" || e.type === "resync") refresh();
+    if (e.type === "dataset" || e.type === "resync") dataset.reload({ silent: true });
+  });
+  // Live events are the main path; while anything is queued or writing, also re-check every 8s in case one is missed.
+  const items = scripts.data?.items || [];
+  usePolling(() => scripts.reload({ silent: true }), 8000, items.some(s => isScriptBusy(s.status)));
+  useFinishedToasts(items);
 
   if (dataset.error) return <ErrorState error={dataset.error} onRetry={dataset.reload} />;
   if (dataset.loading && !dataset.data) return <PageSkeleton />;
@@ -139,6 +146,24 @@ function PlaybookPreview({ play }) {
   );
 }
 
+/** Toast once when a script this page saw as queued/writing finishes. */
+function useFinishedToasts(items) {
+  const toast = useToast();
+  const seen = useRef(new Map());
+  useEffect(() => {
+    for (const s of items) {
+      const before = seen.current.get(s.id);
+      if (before && isScriptBusy(before) && !isScriptBusy(s.status)) {
+        const name = s.title || "Your script";
+        if (s.status === "COMPLETED") toast(`“${name}” is ready`, "success");
+        else if (s.status === "AWAITING_MANUAL") toast(`“${name}” is waiting for a manual import`, "warning");
+        else toast(`“${name}”: ${scriptStatus(s.status).label}`, "error");
+      }
+      seen.current.set(s.id, s.status);
+    }
+  }, [items, toast]);
+}
+
 function ScriptList({ scripts }) {
   const toast = useToast();
   const confirm = useConfirm();
@@ -158,7 +183,7 @@ function ScriptList({ scripts }) {
               <div className="min-w-0 flex-1">
                 <Link to={`/scripts/${s.id}`} className="block truncate font-bold hover:underline">{s.title || `${s.brief.subgenre || s.brief.genre} episode`}</Link>
                 <p className="truncate text-xs text-muted">{s.brief.genre}{s.brief.subgenre && ` · ${s.brief.subgenre}`} · {secs(s.brief.target_duration_seconds)} · {fmtDate(s.created_at)}</p>
-                <div className="mt-1.5"><StatusBadge s={scriptStatus(s.status)} /></div>
+                <div className="mt-1.5 flex items-center gap-2"><StatusBadge s={scriptStatus(s.status)} />{isScriptBusy(s.status) && <Elapsed s={s} />}</div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 {s.status === "COMPLETED" && <Menu ariaLabel={`Download ${s.title || "script"}`} icon="download" buttonClass="btn-ghost btn-sm" items={[
@@ -173,4 +198,11 @@ function ScriptList({ scripts }) {
       )}
     </Card>
   );
+}
+
+/** Live timer for a queued/writing script ("writing for 2:14"). */
+export function Elapsed({ s, className = "text-xs text-muted" }) {
+  const now = useNow(1000, isScriptBusy(s.status));
+  const since = s.status === "RUNNING" ? s.updated_at : s.created_at;
+  return <span className={`tabular ${className}`}>{s.status === "RUNNING" ? "writing for" : "waiting"} {elapsed(since, now)}</span>;
 }
